@@ -1,3 +1,23 @@
+# dependencies
 /node_modules/
 
+# compiled agent bundle (produced by the client at runtime)
+/_agent.js
 _*.js
+*.map
+
+# typescript / build caches
+*.tsbuildinfo
+
+# logs
+*.log
+npm-debug.log*
+bun-debug.log*
+
+# editor / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini

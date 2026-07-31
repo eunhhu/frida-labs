@@ -1,17 +1,25 @@
 {
-  "name": "frid-agent",
+  "name": "frida-labs",
   "version": "1.0.0",
-  "description": "Frida agent written in TypeScript",
+  "description": "Cross-game Frida debugging workspace: reusable lib + per-target scripts + Bun host client",
   "private": true,
-  "main": "agent/index.ts",
   "type": "module",
   "scripts": {
-    "prepare": "bun run build",
-    "build": "frida-compile agent/index.ts -o _agent.js -c",
-    "watch": "frida-compile agent/index.ts -o _agent.js -w"
+    "start": "bun host/client.ts",
+    "build": "bun host/client.ts --build",
+    "typecheck": "tsc -p tsconfig.json && tsc -p host/tsconfig.json"
+  },
+  "dependencies": {
+    "frida": "^17.16.4"
   },
   "devDependencies": {
     "@types/frida-gum": "^19.0.0",
-    "@types/node": "^18.14.0"
-  }
+    "@types/node": "^18.14.0",
+    "frida-compile": "^19.0.5",
+    "frida-il2cpp-bridge": "^0.13.1",
+    "typescript": "^7.0.2"
+  },
+  "trustedDependencies": [
+    "frida"
+  ]
 }
