@@ -1,9 +1,10 @@
 // Dependency-direction checker — enforces "targets depend only on agent/lib".
 // Scans agent/targets/** for import edges; every edge must resolve under
 // agent/lib, unless it is one of the pinned allowlist exceptions being removed
-// in Phase B (terraria ./mono.js → b1, mecchachameleon ./esp.js + piu
-// frida-il2cpp-bridge → b2). When Phase B lands, DEP_ALLOWLIST is deleted and
-// the gate becomes zero-exceptions.
+// in Phase B (mecchachameleon ./esp.js + piu frida-il2cpp-bridge → b2; the
+// terraria ./mono.js pin was removed when b1 consolidated Mono into
+// agent/lib/mono). When Phase B lands, DEP_ALLOWLIST is deleted and the gate
+// becomes zero-exceptions.
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
@@ -26,10 +27,9 @@ export interface AllowlistEntry {
   slice: string;
 }
 
-/** Pinned Phase-A exceptions — delete entries as b1/b2 land; delete the whole
- *  constant when Phase B completes (gate then proves zero exceptions). */
+/** Pinned exceptions — delete entries as b2 lands; delete the whole constant
+ *  when Phase B completes (gate then proves zero exceptions). */
 export const DEP_ALLOWLIST: AllowlistEntry[] = [
-  { file: "agent/targets/terraria/index.ts", line: 19, specifier: "./mono.js", slice: "b1" },
   { file: "agent/targets/mecchachameleon/index.ts", line: 8, specifier: "./esp.js", slice: "b2" },
   { file: "agent/targets/piu/index.ts", line: 7, specifier: "frida-il2cpp-bridge", slice: "b2" },
 ];

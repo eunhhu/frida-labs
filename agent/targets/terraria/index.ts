@@ -16,7 +16,7 @@
 // players. pollChat() stays as a fallback for when the native hook is unavailable.
 
 import { ok } from "../../lib/log.js";
-import { Mono } from "./mono.js";
+import { createMono } from "../../lib/mono/index.js";
 
 const TICK_MS = 1;
 const CHAT_PREFIX = "/";
@@ -50,7 +50,7 @@ interface CommandHost {
 }
 
 function create(host: CommandHost) {
-    const mono = new Mono();
+    const mono = createMono({ moduleName: "Terraria.bin.osx", imageName: "Terraria" });
 
     const Main = mono.klass("Terraria", "Main");
     const Player = mono.klass("Terraria", "Player");
@@ -67,7 +67,7 @@ function create(host: CommandHost) {
     const availableRecipe = mono.staticRef(Main, "availableRecipe");
     const numAvailableRecipes = mono.staticField(Main, "numAvailableRecipes");
     const numRecipes = mono.staticField(Recipe, "numRecipes");
-    const newText = mono.method(Main, "NewText", 4);
+    const newText = mono.methodFromName(Main, "NewText", 4);
 
     const mouseX = mono.staticField(Main, "mouseX");
     const mouseY = mono.staticField(Main, "mouseY");
@@ -132,7 +132,7 @@ function create(host: CommandHost) {
     const itStack = mono.field(Item, "stack");
     const itMaxStack = mono.field(Item, "maxStack");
     const itPrefix = mono.field(Item, "prefix");
-    const setDefaults = mono.method(Item, "SetDefaults", 2);
+    const setDefaults = mono.methodFromName(Item, "SetDefaults", 2);
 
     let features: Record<string, boolean> = { ...DEFAULT_FEATURES };
     let chatWasOpen = false;
