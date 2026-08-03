@@ -1,0 +1,30 @@
+{
+  "targets": {
+    "mecchachameleon": {
+      "process": "PenguinHotel-Win64-Shipping.exe",
+      "mode": "attach",
+      "entry": "agent/targets/mecchachameleon/index.ts"
+    },
+    "piu": {
+      "process": "PUMP IT UP RISE.exe",
+      "mode": "attach",
+      "entry": "agent/targets/piu/index.ts"
+    },
+    "terraria": {
+      "process": "Terraria.exe",
+      "mode": "attach",
+      "entry": "agent/targets/terraria/index.ts",
+      "processByPlatform": {
+        "darwin": "Terraria.bin.osx"
+      }
+    },
+    "adofai": {
+      "process": "A Dance of Fire and Ice.exe",
+      "mode": "attach",
+      "entry": "agent/targets/adofai/index.ts",
+      "processByPlatform": {
+        "darwin": "A Dance of Fire and Ice"
+      }
+    }
+  }
+}

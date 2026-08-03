@@ -1,6 +1,6 @@
 // Target entry: MECCHA CHAMELEON (PenguinHotel-Win64-Shipping.exe).
-// Build:  bun run build:meccha    (frida-compile -> _agent.js)
-// Drive:  bun run client         (host/client.ts loads _agent.js, exposes `api`)
+// Build:  flab build mecchachameleon   (frida-compile -> _agent.js)
+// Drive:  flab run mecchachameleon     (REPL over rpc.exports)
 //
 // Everything here is game-specific glue; the heavy lifting lives in ../../lib.
 

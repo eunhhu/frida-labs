@@ -1,0 +1,14 @@
+// Public programmatic interface for frida-labs — the single import surface.
+// The CLI (src/cli) and TUI (src/tui) are thin frontends over this barrel;
+// embedding agents should import from here rather than reaching into
+// individual core modules. Import-safe: no module below performs work at
+// import time.
+
+export * from "./manifest.js";
+export * from "./compile.js";
+export * from "./lifecycle.js";
+export * from "./session.js";
+export * from "./commands.js";
+export * from "./depcheck.js";
+export * from "./scaffold.js";
+export * from "./libref.js";

@@ -1,5 +1,5 @@
 // Target entry: A Dance of Fire and Ice (Unity, Mono backend).
-// Build/run:  bun run start adofai
+// Build/run:  flab run adofai
 //
 // All the heavy lifting is in ../../lib/mono — this only exposes rpc for the REPL.
 

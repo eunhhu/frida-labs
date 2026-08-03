@@ -1,14 +1,15 @@
 /// <reference path="../globals.d.ts" />
-// Logging that works both under the frida CLI (console) and the host client
-// (structured send). Every line is also mirrored to send() so host/client.ts
-// can pretty-print and tag it.
+// Logging that works both under the frida CLI (console) and the host
+// (structured send). Prefer send(): the host session engine pretty-prints
+// and tags it. console.log is the fallback for contexts without a message
+// channel — emitting both would double every line on the host.
 
 export function log(...args: unknown[]): void {
-  console.log(...(args as string[]));
   try {
-    send({ type: "log", line: args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" ") });
+    send({ type: "log", line: args.map((a) => (typeof a === "string" ? a : JSON.stringify(a, null, 2))).join(" ") });
   } catch {
-    /* send unavailable in some contexts */
+    // send() unavailable (e.g. gum script without a channel): fall back.
+    console.log(...(args as string[]));
   }
 }
 

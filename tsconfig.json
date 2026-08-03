@@ -1,16 +1,1 @@
-{
-  "compilerOptions": {
-    "target": "ES2022",
-    "lib": ["ES2022"],
-    "module": "Node16",
-    "moduleResolution": "Node16",
-    "strict": true,
-    "noEmit": true,
-    "skipLibCheck": true,
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
-    "types": ["frida-gum"]
-  },
-  "include": ["agent/**/*.ts"],
-  "exclude": ["node_modules", "agent/_scratch"]
-}
+{"compilerOptions":{"target":"ES2022","lib":["ES2022"],"module":"Node16","moduleResolution":"Node16","strict":true,"noEmit":true,"skipLibCheck":true,"esModuleInterop":true,"forceConsistentCasingInFileNames":true,"types":["frida-gum"]},"include":["agent/**/*.ts"],"exclude":["node_modules","agent/_scratch"]}

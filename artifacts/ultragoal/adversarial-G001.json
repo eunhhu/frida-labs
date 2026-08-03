@@ -1,0 +1,473 @@
+{
+  "kind": "failure-mode-test",
+  "surface": "cli+depcheck+session",
+  "cases": [
+    {
+      "receipt": "adversarial-cli.json",
+      "data": {
+        "surface": "adversarial CLI behavior",
+        "cwd": "/Users/sunwoo/work/frida-labs",
+        "timestamp": "2026-08-03T14:25:34.534053+00:00",
+        "commands": [
+          {
+            "name": "run-no-target",
+            "argv": [
+              "bun",
+              "src/bin.ts",
+              "run"
+            ],
+            "stdout": "",
+            "stderr": "usage: flab run <target> [--eval code]\n",
+            "exitCode": 1,
+            "timedOut": false,
+            "durationMs": 31,
+            "expectationPassed": true
+          },
+          {
+            "name": "depcheck-unknown-flag",
+            "argv": [
+              "bun",
+              "src/bin.ts",
+              "depcheck",
+              "--definitely-unknown"
+            ],
+            "stdout": "scanned 19 import edge(s) across agent/targets\n~ allowlisted  agent/targets/mecchachameleon/index.ts:8  \"./esp.js\"  [slice b2]\n~ allowlisted  agent/targets/piu/index.ts:7  \"frida-il2cpp-bridge\"  [slice b2]\n~ allowlisted  agent/targets/terraria/index.ts:19  \"./mono.js\"  [slice b1]\n",
+            "stderr": "",
+            "exitCode": 0,
+            "timedOut": false,
+            "durationMs": 31,
+            "expectationPassed": true
+          },
+          {
+            "name": "probe-nonexistent",
+            "argv": [
+              "bun",
+              "src/bin.ts",
+              "probe",
+              "flab-qa-no-such-process-9f4141",
+              "--json"
+            ],
+            "stdout": "compiling agent/targets/_probe/index.ts \u2026\nattaching to flab-qa-no-such-process-9f4141 \u2026\n",
+            "stderr": "Process not found\n",
+            "exitCode": 1,
+            "timedOut": false,
+            "durationMs": 180,
+            "expectationPassed": true
+          },
+          {
+            "name": "ghostty-amfi",
+            "argv": [
+              "bun",
+              "src/bin.ts",
+              "run",
+              "agent/targets/_probe/index.ts",
+              "--proc",
+              "Ghostty",
+              "--no-watch",
+              "--eval",
+              "await engines()",
+              "--json"
+            ],
+            "stdout": "compiling agent/targets/_probe/index.ts \u2026\nattaching to Ghostty \u2026\n",
+            "stderr": "Unable to access process with pid 701 from the current user account \u2014 macOS AMFI denied task_for_pid. Hardened-runtime target without get-task-allow: sudo /usr/sbin/DevToolsSecurity -enable, then REBOOT \u2014 Apple Silicon arms the AMFI policy at boot (sudo alone does not bypass it). Non-hardened targets attach as soon as Developer Mode is on.\n",
+            "exitCode": 1,
+            "timedOut": false,
+            "durationMs": 499,
+            "expectationPassed": true
+          }
+        ],
+        "allExpectationsPassed": true,
+        "ghosttyNote": "run requires a manifest target or entry path; this uses the _probe entry plus --proc Ghostty to exercise the same run/attach AMFI branch without modifying tracked manifest files."
+      }
+    },
+    {
+      "receipt": "api-surface.json",
+      "data": {
+        "surface": "api-surface",
+        "cwd": "/Users/sunwoo/work/frida-labs",
+        "timestamp": "2026-08-03T14:23:40.442365+00:00",
+        "command": {
+          "argv": [
+            "bun",
+            "/tmp/flab-qa/api_surface.ts"
+          ],
+          "stdout": "{\"ok\":true,\"checks\":{\"startSession\":true,\"evalOnce\":true,\"depcheck\":true,\"commands\":true,\"renderHelp\":true,\"watchLifecycle\":true,\"enableSpawnGating\":true,\"scaffold\":true,\"libReference\":true,\"sameModuleInstance\":true},\"importSideEffects\":[],\"exportKeys\":[\"AGENT_OUT\",\"DEP_ALLOWLIST\",\"PROBE_TARGET\",\"addTarget\",\"commands\",\"compileAgent\",\"compileEntry\",\"depcheck\",\"enableSpawnGating\",\"evalOnce\",\"findImportEdges\",\"getTarget\",\"importPath\",\"libReference\",\"listTargets\",\"loadManifest\",\"renderHelp\",\"renderLibText\",\"repoRoot\",\"saveManifest\",\"scaffold\",\"startSession\",\"watchEntry\",\"watchLifecycle\"]}\n",
+          "stderr": "",
+          "exitCode": 0,
+          "timedOut": false,
+          "durationMs": 35
+        }
+      }
+    },
+    {
+      "receipt": "cleanup.json",
+      "data": {
+        "surface": "QA cleanup",
+        "sleeperPid": 58884,
+        "sleeperStopped": true,
+        "tmpredteamRemoved": true,
+        "scratchFilesRemoved": [
+          "/tmp/s.c",
+          "/tmp/sleeper",
+          "/tmp/flab-qa/sleeper.pid",
+          "/tmp/flab-qa/cli_surface.py",
+          "/tmp/flab-qa/capture.py",
+          "/tmp/flab-qa/depcheck_static.py",
+          "/tmp/flab-qa/api_surface.ts",
+          "/tmp/flab-qa/probe_equivalence.py",
+          "/tmp/flab-qa/describe_fallback.ts",
+          "/tmp/flab-qa/adversarial_cli.py",
+          "/tmp/flab-qa/depcheck_parser_redteam.ts",
+          "/tmp/flab-qa/kill-check.stderr"
+        ],
+        "finalVerification": {
+          "sleeperProcessPresent": false,
+          "sleeperFilePresent": false,
+          "tmpredteamPresent": false,
+          "allRemainingFlabQaFilesAreValidJsonReceipts": true,
+          "agentTargetsStatus": " M agent/targets/adofai/index.ts\n M agent/targets/mecchachameleon/index.ts\n M agent/targets/piu/index.ts\n?? agent/targets/_probe/\n?? agent/targets/terraria/\n"
+        },
+        "retainedArtifacts": [
+          "/tmp/flab-qa/cli-surface.json",
+          "/tmp/flab-qa/depcheck-leftpad.json",
+          "/tmp/flab-qa/depcheck-deep-relative.json",
+          "/tmp/flab-qa/depcheck-static-cleanup.json",
+          "/tmp/flab-qa/api-surface.json",
+          "/tmp/flab-qa/probe-run-equivalence.json",
+          "/tmp/flab-qa/describe-fallback.json",
+          "/tmp/flab-qa/adversarial-cli.json",
+          "/tmp/flab-qa/depcheck-parser-redteam.json",
+          "/tmp/flab-qa/lifecycle-cleanup-static.json",
+          "/tmp/flab-qa/cleanup.json"
+        ]
+      }
+    },
+    {
+      "receipt": "cli-surface.json",
+      "data": {
+        "surface": "CLI surface",
+        "cwd": "/Users/sunwoo/work/frida-labs",
+        "timestamp": "2026-08-03T14:22:05.688625+00:00",
+        "commands": [
+          {
+            "argv": [
+              "bun",
+              "src/bin.ts",
+              "help"
+            ],
+            "stdout": "flab \u2014 cross-game Frida workspace tool\n\ncommands:\n  flab targets [--json]\n      List registered targets (name, process, mode, entry).\n  flab new <name> [--proc \"Game.exe\"] [--json]\n      Scaffold a new target and register it in frida-labs.json.\n  flab build <target> [--out file]\n      Compile a target's agent bundle without injecting.\n  flab run <target> [--proc P] [--spawn] [--eval \"code\"] [--no-watch] [--json]\n      Compile, attach, inject, then REPL (or one-shot --eval). Hot reload on save.\n  flab probe <process> [--eval \"code\"] [--json]\n      Inject the engine-agnostic probe agent into any process and report what it sees.\n  flab lib [--json]\n      Print the agent/lib API surface (modules, functions, docs) \u2014 extracted from source.\n  flab depcheck [--json]\n      Fail when any target imports outside agent/lib (allowlist pinned per file:line).\n  flab doctor [--json]\n      Environment check: runtime, frida version, reachable device, manifest sanity.\n\n  flab tui [target]      interactive ink UI for humans\n  flab <cmd> --json      machine-readable output for agents\n",
+            "stderr": "",
+            "exitCode": 0,
+            "timedOut": false,
+            "durationMs": 34
+          },
+          {
+            "argv": [
+              "bun",
+              "src/bin.ts",
+              "targets",
+              "--json"
+            ],
+            "stdout": "[\n  {\n    \"name\": \"mecchachameleon\",\n    \"process\": \"PenguinHotel-Win64-Shipping.exe\",\n    \"mode\": \"attach\",\n    \"entry\": \"agent/targets/mecchachameleon/index.ts\"\n  },\n  {\n    \"name\": \"piu\",\n    \"process\": \"PUMP IT UP RISE.exe\",\n    \"mode\": \"attach\",\n    \"entry\": \"agent/targets/piu/index.ts\"\n  },\n  {\n    \"name\": \"terraria\",\n    \"process\": \"Terraria.exe\",\n    \"mode\": \"attach\",\n    \"entry\": \"agent/targets/terraria/index.ts\",\n    \"processByPlatform\": {\n      \"darwin\": \"Terraria.bin.osx\"\n    }\n  },\n  {\n    \"name\": \"adofai\",\n    \"process\": \"A Dance of Fire and Ice.exe\",\n    \"mode\": \"attach\",\n    \"entry\": \"agent/targets/adofai/index.ts\",\n    \"processByPlatform\": {\n      \"darwin\": \"A Dance of Fire and Ice\"\n    }\n  }\n]\n",
+            "stderr": "",
+            "exitCode": 0,
+            "timedOut": false,
+            "durationMs": 31
+          },
+          {
+            "argv": [
+              "bun",
+              "src/bin.ts",
+              "doctor",
+              "--json"
+            ],
+            "stdout": "[\n  {\n    \"name\": \"runtime\",\n    \"ok\": true,\n    \"detail\": \"v24.3.0 (darwin/arm64)\"\n  },\n  {\n    \"name\": \"frida\",\n    \"ok\": true,\n    \"detail\": \"server unknown\"\n  },\n  {\n    \"name\": \"device\",\n    \"ok\": true,\n    \"detail\": \"local device reachable, 519 processes visible\"\n  },\n  {\n    \"name\": \"manifest\",\n    \"ok\": true,\n    \"detail\": \"4 targets\"\n  }\n]\n",
+            "stderr": "",
+            "exitCode": 0,
+            "timedOut": false,
+            "durationMs": 230
+          },
+          {
+            "argv": [
+              "bun",
+              "src/bin.ts",
+              "lib",
+              "--json"
+            ],
+            "stdout": "[\n  {\n    \"module\": \"cocos\",\n    \"about\": \"Cocos2d-x helpers. Cocos has no stable C ABI across builds \u2014 most games\\nstatically link libcocos2d into the main binary with C++ symbols stripped\\nor mangled \u2014 so this module is intentionally about *discovery*, not a\\ncanned cheat: find the cocos module, browse its symbols/exports by regex,\\nand hook the per-frame scheduler entry point when a usable symbol exists.\",\n    \"functions\": [\n      {\n        \"name\": \"findCocos\",\n        \"signature\": \"function findCocos(): CocosModule | null\",\n        \"doc\": \"Locate the cocos2d runtime module, or null when the game is not cocos.\"\n      },\n      {\n        \"name\": \"symbols\",\n        \"signature\": \"function symbols(re: RegExp, mod?: Module): Array<{ name: string; address: string }>\",\n        \"doc\": \"All cocos symbols/exports whose name matches `re`.\"\n      },\n      {\n        \"name\": \"hookMainLoop\",\n        \"signature\": \"function hookMainLoop(onFrame: () => void): InvocationListener | null\",\n        \"doc\": \"\"\n      }\n    ]\n  },\n  {\n    \"module\": \"detect\",\n    \"about\": \"Engine / managed-runtime detection \u2014 reusable across every target.\\n\\nEach detector is a cheap module-name / export-symbol check, safe to run on\\nany process. `detectAll()` runs them all and returns every engine that\\nmatched (a Unity-IL2CPP game will report both \\\"unity\\\" and \\\"il2cpp\\\").\",\n    \"functions\": [\n      {\n        \"name\": \"if\",\n        \"signature\": \"if(main.enumerateExports().some((e)\",\n        \"doc\": \"Module the detector matched on (main module for unreal/cocos fallbacks).\"\n      },\n      {\n        \"name\": \"detectAll\",\n        \"signature\": \"function detectAll(): EngineInfo[]\",\n        \"doc\": \"Every engine that matched, best guess first. Empty on a bare native process.\"\n      },\n      {\n        \"name\": \"detect\",\n        \"signature\": \"function detect(): EngineInfo | null\",\n        \"doc\": \"Single best guess (first match), or null for a bare native process.\"\n      }\n    ]\n  },\n  {\n    \"module\": \"hook\",\n    \"about\": \"Generic native hooking / tracing helpers, target-agnostic.\",\n    \"functions\": [\n      {\n        \"name\": \"trace\",\n        \"signature\": \"function trace(target: NativePointer, opts: TraceOptions = {}): InvocationListener\",\n        \"doc\": \"Attach a logging tracer to a native address; returns the listener so you can detach().\"\n      },\n      {\n        \"name\": \"stub\",\n        \"signature\": \"function stub(target: NativePointer, retValue: NativePointer | number): InvocationListener\",\n        \"doc\": \"Replace a function's return value with a constant (quick \\\"always true/false\\\" patches).\"\n      },\n      {\n        \"name\": \"detachAll\",\n        \"signature\": \"function detachAll(): void\",\n        \"doc\": \"Detach every interceptor and flush \u2014 the reliable reset when re-hooking the same address.\"\n      }\n    ]\n  },\n  {\n    \"module\": \"il2cpp\",\n    \"about\": \"IL2CPP (Unity) helpers. Target-agnostic across Unity games. Call inside\\nIl2Cpp.perform(). Importing this module brings in the IL2CPP bridge, so only\\nUnity targets should import it (never the shared lib barrel).\",\n    \"functions\": [\n      {\n        \"name\": \"classes\",\n        \"signature\": \"function classes(q: string, assembly = \\\"Assembly-CSharp\\\"): Il2Cpp.Class[]\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"methods\",\n        \"signature\": \"function methods(q: string, assembly = \\\"Assembly-CSharp\\\"): Il2Cpp.Method[]\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"hook\",\n        \"signature\": \"function hook(m: Il2Cpp.Method | Il2Cpp.Method[], overrideArgs?: unknown[], overrideRet?: unknown): void\",\n        \"doc\": \"Trace-hook one or many IL2CPP methods, logging args/return; optionally override args/return.\"\n      }\n    ]\n  },\n  {\n    \"module\": \"index\",\n    \"about\": \"frida-labs generic library \u2014 cross-game debugging utilities.\\nImport in any target: `import { modules, exports, trace, ue } from \\\"../../lib/index.js\\\";`\\n\\nNOTE: the Unity/IL2CPP helpers are intentionally NOT re-exported here \u2014 importing\\nthis barrel eagerly runs UE reflection discovery, and pulling in the IL2CPP bridge\\nwould bloat/break non-Unity targets. Unity targets import \\\"./il2cpp.js\\\" directly.\",\n    \"functions\": []\n  },\n  {\n    \"module\": \"log\",\n    \"about\": \"/ <reference path=\\\"../globals.d.ts\\\" />\\nLogging that works both under the frida CLI (console) and the host\\n(structured send). Every line is also mirrored to send() so the host\\nsession engine can pretty-print and tag it.\",\n    \"functions\": [\n      {\n        \"name\": \"log\",\n        \"signature\": \"function log(...args: unknown[]): void\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"ok\",\n        \"signature\": \"const ok = (...a: unknown[]): void => log(\\\"[+]\\\", ...a)\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"warn\",\n        \"signature\": \"const warn = (...a: unknown[]): void => log(\\\"[!]\\\", ...a)\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"err\",\n        \"signature\": \"const err = (...a: unknown[]): void => log(\\\"[x]\\\", ...a)\",\n        \"doc\": \"\"\n      }\n    ]\n  },\n  {\n    \"module\": \"mem\",\n    \"about\": \"Generic memory helpers \u2014 reusable across every target.\\nGuarded reads return null instead of throwing: RE code walks half-valid\\npointers constantly, so a failed read is data, not an exception.\",\n    \"functions\": [\n      {\n        \"name\": \"mainModule\",\n        \"signature\": \"const mainModule = (): Module => Process.enumerateModules()[0]\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"moduleByPattern\",\n        \"signature\": \"const moduleByPattern = (re: RegExp): Module | undefined =>\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"rP\",\n        \"signature\": \"const rP = (p: NativePointer): NativePointer | null =>\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"rU8\",\n        \"signature\": \"const rU8 = (p: NativePointer): number | null => { try { return p.readU8(); } catch { return null; } }\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"rU16\",\n        \"signature\": \"const rU16 = (p: NativePointer): number | null => { try { return p.readU16(); } catch { return null; } }\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"rU32\",\n        \"signature\": \"const rU32 = (p: NativePointer): number | null => { try { return p.readU32(); } catch { return null; } }\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"rU64\",\n        \"signature\": \"const rU64 = (p: NativePointer): UInt64 | null => { try { return p.readU64(); } catch { return null; } }\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"rS32\",\n        \"signature\": \"const rS32 = (p: NativePointer): number | null => { try { return p.readS32(); } catch { return null; } }\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"rF\",\n        \"signature\": \"const rF = (p: NativePointer): number | null => { try { return p.readFloat(); } catch { return null; } }\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"rD\",\n        \"signature\": \"const rD = (p: NativePointer): number | null => { try { return p.readDouble(); } catch { return null; } }\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"rCStr\",\n        \"signature\": \"const rCStr = (p: NativePointer, max = 256): string | null => { try { return p.readCString(max); } catch { return null; } }\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"rUtf16\",\n        \"signature\": \"const rUtf16 = (p: NativePointer, len = -1): string | null => { try { return p.readUtf16String(len); } catch { return null; } }\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"wF\",\n        \"signature\": \"const wF = (p: NativePointer, v: number): boolean => { try { p.writeFloat(v); return true; } catch { return false; } }\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"wU32\",\n        \"signature\": \"const wU32 = (p: NativePointer, v: number): boolean => { try { p.writeU32(v); return true; } catch { return false; } }\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"wU8\",\n        \"signature\": \"const wU8 = (p: NativePointer, v: number): boolean => { try { p.writeU8(v); return true; } catch { return false; } }\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"wP\",\n        \"signature\": \"const wP = (p: NativePointer, v: NativePointer): boolean => { try { p.writePointer(v); return true; } catch { return false; } }\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"dump\",\n        \"signature\": \"function dump(p: NativePointer, len = 128): string\",\n        \"doc\": \"Pretty hex dump around an address, e.g. hexdump(ptr, 64).\"\n      },\n      {\n        \"name\": \"scan\",\n        \"signature\": \"function scan(pattern: string, module: Module = mainModule(), limit = 64): NativePointer[]\",\n        \"doc\": \"AOB / byte-pattern scan over a module (default: main module). Pattern e.g. \\\"48 8B ?? ?? 89\\\".\"\n      },\n      {\n        \"name\": \"scanText\",\n        \"signature\": \"function scanText(text: string, module: Module = mainModule(), opts: { utf16?: boolean; limit?: number } = {}): NativePointer[]\",\n        \"doc\": \"Scan for a UTF-8 (and optionally UTF-16LE) string literal in a module.\"\n      },\n      {\n        \"name\": \"if\",\n        \"signature\": \"if(opts.utf16) push(bytes.map((b)\",\n        \"doc\": \"\"\n      }\n    ]\n  },\n  {\n    \"module\": \"mono/index\",\n    \"about\": \"/ <reference path=\\\"../../globals.d.ts\\\" />\\nGeneric Mono runtime toolkit \u2014 reusable across ANY Mono-backed Unity game\\n(mono-2.0-bdwgc/sgen). Enumerate assemblies, classes, methods and fields via\\nthe Mono embedding API, resolve JIT-compiled native addresses, and trace\\nmanaged methods. IL2CPP games use ../il2cpp.js instead.\\n\\n  import { mono } from \\\"../../lib/mono/index.js\\\";\\n  mono.assemblies();\\n  mono.find(/Controller/);                 // classes in Assembly-CSharp\\n  mono.methods(mono.classByName(\\\"\\\", \\\"scrController\\\"));\\n  mono.trace(mono.method(\\\"\\\", \\\"scrController\\\", \\\"Update\\\"));\",\n    \"functions\": [\n      {\n        \"name\": \"root\",\n        \"signature\": \"root()\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"attach\",\n        \"signature\": \"attach(d: Ptr)\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"foreach\",\n        \"signature\": \"foreach(cb: NativeCallback<\\\"void\\\", [\\\"pointer\\\", \\\"pointer\\\"]>, ud: Ptr)\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"image\",\n        \"signature\": \"image(asm: Ptr)\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"imageName\",\n        \"signature\": \"imageName(img: Ptr)\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"rows\",\n        \"signature\": \"rows(img: Ptr, table: number)\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"classGet\",\n        \"signature\": \"classGet(img: Ptr, token: number)\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"classFromName\",\n        \"signature\": \"classFromName(img: Ptr, ns: Ptr, name: Ptr)\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"className\",\n        \"signature\": \"className(k: Ptr)\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"classNamespace\",\n        \"signature\": \"classNamespace(k: Ptr)\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"classMethods\",\n        \"signature\": \"classMethods(k: Ptr, iter: Ptr)\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"classFields\",\n        \"signature\": \"classFields(k: Ptr, iter: Ptr)\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"methodName\",\n        \"signature\": \"methodName(mth: Ptr)\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"methodFullName\",\n        \"signature\": \"methodFullName(mth: Ptr, sig: number)\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"fieldName\",\n        \"signature\": \"fieldName(f: Ptr)\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"fieldOffset\",\n        \"signature\": \"fieldOffset(f: Ptr)\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"compile\",\n        \"signature\": \"compile(mth: Ptr)\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"invoke\",\n        \"signature\": \"invoke(mth: Ptr, obj: Ptr, argv: Ptr, exc: Ptr)\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"stringNew\",\n        \"signature\": \"stringNew(d: Ptr, s: Ptr)\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"stringChars\",\n        \"signature\": \"stringChars(s: Ptr)\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"objectGetClass\",\n        \"signature\": \"objectGetClass(o: Ptr)\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"assemblies\",\n        \"signature\": \"assemblies()\",\n        \"doc\": \"Names of every loaded assembly image.\"\n      },\n      {\n        \"name\": \"image\",\n        \"signature\": \"image(name = \\\"Assembly-CSharp\\\")\",\n        \"doc\": \"A loaded image by assembly name (default Assembly-CSharp), or null.\"\n      },\n      {\n        \"name\": \"classes\",\n        \"signature\": \"classes(image: Ptr | null = mono.image())\",\n        \"doc\": \"Every class defined in an image (walks the TypeDef metadata table).\"\n      },\n      {\n        \"name\": \"find\",\n        \"signature\": \"find(re: RegExp, image: Ptr | null = mono.image())\",\n        \"doc\": \"Classes whose name (or namespace.name) matches a regex.\"\n      },\n      {\n        \"name\": \"classByName\",\n        \"signature\": \"classByName(ns: string, name: string, image: Ptr | null = mono.image())\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"methods\",\n        \"signature\": \"methods(klass: Ptr | null)\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"fields\",\n        \"signature\": \"fields(klass: Ptr | null)\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"method\",\n        \"signature\": \"method(ns: string, className: string, methodName: string, image: Ptr | null = mono.image())\",\n        \"doc\": \"A MonoMethod* by class + method name (first overload).\"\n      },\n      {\n        \"name\": \"addressOf\",\n        \"signature\": \"addressOf(method: Ptr | null)\",\n        \"doc\": \"JIT-compiled native entry address of a managed method (for hooking/disasm).\"\n      },\n      {\n        \"name\": \"trace\",\n        \"signature\": \"trace(method: Ptr | null, label?: string)\",\n        \"doc\": \"Attach a logging tracer to a managed method (enter/leave). Returns the listener.\"\n      },\n      {\n        \"name\": \"invoke\",\n        \"signature\": \"invoke(method: Ptr, obj: Ptr | null, argPtrs: Ptr[] = [])\",\n        \"doc\": \"Call a managed method. obj NULL for static; value-type args by pointer.\"\n      },\n      {\n        \"name\": \"string\",\n        \"signature\": \"string(s: string)\",\n        \"doc\": \"New managed System.String from a JS string.\"\n      },\n      {\n        \"name\": \"readString\",\n        \"signature\": \"readString(s: Ptr)\",\n        \"doc\": \"Read a managed System.String back to a JS string.\"\n      },\n      {\n        \"name\": \"objectClass\",\n        \"signature\": \"objectClass(obj: Ptr)\",\n        \"doc\": \"Class name of a live managed object (follows its MonoObject header).\"\n      }\n    ]\n  },\n  {\n    \"module\": \"search\",\n    \"about\": \"Native discovery helpers \u2014 modules, exports, symbols, imports.\\nTarget-agnostic; works on any process.\",\n    \"functions\": [\n      {\n        \"name\": \"modules\",\n        \"signature\": \"function modules(q: string): Module[]\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"exports\",\n        \"signature\": \"function exports(q: string, moduleName?: string): ModuleExportDetails[]\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"imports\",\n        \"signature\": \"function imports(q: string, moduleName: string): ModuleImportDetails[]\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"symbols\",\n        \"signature\": \"function symbols(q: string, moduleName: string): ModuleSymbolDetails[]\",\n        \"doc\": \"Debug symbols (works when the module ships a symbol table / DWARF / PDB is loaded).\"\n      }\n    ]\n  },\n  {\n    \"module\": \"strings\",\n    \"about\": \"Whole-process string scan \u2014 find interesting literals (debug tags, URLs,\\ncheat flags) without knowing which module they live in. For a single-module\\nscan use mem.scanText instead.\",\n    \"functions\": [\n      {\n        \"name\": \"strings\",\n        \"signature\": \"function strings(query: string | RegExp, opts: { utf16?: boolean; cap?: number } = {}): StringHit[]\",\n        \"doc\": \"\"\n      }\n    ]\n  },\n  {\n    \"module\": \"ue/actor\",\n    \"about\": \"Generic UE actor spatial helpers: root component, world location, the local\\nview camera, and world->screen projection. Reusable for any UE5 game.\",\n    \"functions\": [\n      {\n        \"name\": \"rootComp\",\n        \"signature\": \"function rootComp(actor: NativePointer): NativePointer | null\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"worldLoc\",\n        \"signature\": \"function worldLoc(actor: NativePointer): [number, number, number] | null\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"localPlayerController\",\n        \"signature\": \"const localPlayerController = (): NativePointer | null =>\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"firstInstance\",\n        \"signature\": \"firstInstance((o)\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"controlledPawn\",\n        \"signature\": \"const controlledPawn = (): NativePointer | null =>\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"qrot\",\n        \"signature\": \"function qrot(q: number[], v: number[]): number[]\",\n        \"doc\": \"Quaternion-rotate a vector (UE X-forward / Y-right / Z-up).\"\n      },\n      {\n        \"name\": \"viewFromCamera\",\n        \"signature\": \"function viewFromCamera(cam: NativePointer, W: number, H: number): View\",\n        \"doc\": \"View basis from a camera component's world transform + FOV.\"\n      },\n      {\n        \"name\": \"localView\",\n        \"signature\": \"function localView(W = 1920, H = 1080): View | null\",\n        \"doc\": \"Local view from whatever pawn the player controls (first-person or spectate camera).\"\n      },\n      {\n        \"name\": \"worldToScreen\",\n        \"signature\": \"function worldToScreen(view: View, wp: number[]): Screen | null\",\n        \"doc\": \"\"\n      }\n    ]\n  },\n  {\n    \"module\": \"ue/index\",\n    \"about\": \"Generic Unreal Engine 5 toolkit \u2014 reusable across UE games.\",\n    \"functions\": []\n  },\n  {\n    \"module\": \"ue/movement\",\n    \"about\": \"Generic UCharacterMovementComponent trainer. Works for any UE5 game that uses\\nthe stock character movement component. The component is re-resolved on every\\ncall so it survives respawns and round changes.\",\n    \"functions\": [\n      {\n        \"name\": \"movementComponent\",\n        \"signature\": \"function movementComponent(): NativePointer | null\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"read\",\n        \"signature\": \"read()\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"apply\",\n        \"signature\": \"apply(opts: Record<string, number>)\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"fly\",\n        \"signature\": \"fly(on: boolean)\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"enforce\",\n        \"signature\": \"enforce(on: boolean, intervalMs = 250)\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"reset\",\n        \"signature\": \"reset()\",\n        \"doc\": \"\"\n      }\n    ]\n  },\n  {\n    \"module\": \"ue/reflection\",\n    \"about\": \"Generic Unreal Engine 5 reflection engine \u2014 reusable for ANY UE5 game.\\nAuto-discovers GUObjectArray + GNames from memory signatures (addresses move\\nevery launch) and exposes name/class/property resolution over the live\\nUObject graph. Field offsets below are the stable UE5 layout; override via\\nsetOffsets() if a particular build differs.\",\n    \"functions\": [\n      {\n        \"name\": \"inModule\",\n        \"signature\": \"const inModule = (p: NativePointer | null): boolean =>\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"resolveId\",\n        \"signature\": \"function resolveId(id: number): string | null\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"fname\",\n        \"signature\": \"function fname(p: NativePointer): string | null\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"if\",\n        \"signature\": \"if(s && num) s\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"objAt\",\n        \"signature\": \"function objAt(i: number): NativePointer | null\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"nameOf\",\n        \"signature\": \"const nameOf = (o: NativePointer | null): string | null => (o ? fname(o.add(O.NAME)) : null)\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"classOf\",\n        \"signature\": \"const classOf = (o: NativePointer | null): NativePointer | null => (o ? rP(o.add(O.CLASS)) : null)\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"classNameOf\",\n        \"signature\": \"const classNameOf = (o: NativePointer | null): string | null => { const c = classOf(o); return c ? nameOf(c) : null; }\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"outerOf\",\n        \"signature\": \"const outerOf = (o: NativePointer): NativePointer | null => rP(o.add(O.OUTER))\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"superOf\",\n        \"signature\": \"const superOf = (c: NativePointer): NativePointer | null => rP(c.add(O.SUPER))\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"isA\",\n        \"signature\": \"function isA(o: NativePointer, target: string): boolean\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"pkgOf\",\n        \"signature\": \"function pkgOf(o: NativePointer): NativePointer\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"propOff\",\n        \"signature\": \"function propOff(o: NativePointer, name: string): number | null\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"childOfType\",\n        \"signature\": \"function childOfType(actor: NativePointer, type: string, span = 0x600): NativePointer | null\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"firstInstance\",\n        \"signature\": \"function firstInstance(pred: (o: NativePointer) => boolean): NativePointer | null\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"instancesOf\",\n        \"signature\": \"function instancesOf(re: RegExp): NativePointer[]\",\n        \"doc\": \"Every live instance whose class name matches a regex (skips CDOs).\"\n      },\n      {\n        \"name\": \"findClass\",\n        \"signature\": \"function findClass(name: string): NativePointer | null\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"findFunc\",\n        \"signature\": \"function findFunc(cls: NativePointer, name: string): NativePointer | null\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"defaultActorVtable\",\n        \"signature\": \"function defaultActorVtable(): NativePointer | null\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"classesInPackage\",\n        \"signature\": \"function classesInPackage(pkg: string): string[]\",\n        \"doc\": \"List the classes owned by a /Script or /Game package, e.g. classesInPackage(\\\"/Script/PenguinHotel\\\").\"\n      }\n    ]\n  },\n  {\n    \"module\": \"ue/render\",\n    \"about\": \"Generic UE on-screen drawing: call UCanvas draw UFunctions through\\nUObject::ProcessEvent, and drive them from an AHUD::PostRender hook so the\\nCanvas is valid. ProcessEvent and the PostRender vtable slot are found at\\nruntime. Reusable for any UE5 game with a Canvas HUD.\",\n    \"functions\": [\n      {\n        \"name\": \"findProcessEvent\",\n        \"signature\": \"async function findProcessEvent(ms = 700): Promise<{ slot: number; addr: NativePointer } | null>\",\n        \"doc\": \"Locate UObject::ProcessEvent: the shared vtable slot invoked with a UFunction as arg2.\"\n      },\n      {\n        \"name\": \"findHudRenderSlot\",\n        \"signature\": \"async function findHudRenderSlot(hud: NativePointer, ms = 800): Promise<{ slot: number; vt: NativePointer } | null>\",\n        \"doc\": \"Locate the AHUD render slot: a vtable override entered while Canvas is set.\"\n      },\n      {\n        \"name\": \"liveHud\",\n        \"signature\": \"function liveHud(): NativePointer | null\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"init\",\n        \"signature\": \"init()\",\n        \"doc\": \"A Canvas draw surface bound to ProcessEvent \u2014 call drawBox/drawLine inside an onDraw callback.\"\n      },\n      {\n        \"name\": \"drawBox\",\n        \"signature\": \"drawBox(cv: NativePointer, x: number, y: number, w: number, h: number, th: number, r: number, g: number, b: number, a: number)\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"drawLine\",\n        \"signature\": \"drawLine(cv: NativePointer, x1: number, y1: number, x2: number, y2: number, th: number, r: number, g: number, b: number, a: number)\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"hookRender\",\n        \"signature\": \"hookRender(onDraw: DrawFn)\",\n        \"doc\": \"Install the PostRender hook; onDraw runs every rendered frame with a valid Canvas.\"\n      },\n      {\n        \"name\": \"unhook\",\n        \"signature\": \"unhook()\",\n        \"doc\": \"\"\n      }\n    ]\n  },\n  {\n    \"module\": \"watch\",\n    \"about\": \"Memory watch / poke / freeze \u2014 the cheat-engine loop, scriptable.\\n\\n  poke(ptr, 9999, \\\"u32\\\")            one-shot typed write\\n  const fz = freeze(ptr, 9999)      re-write every tick (\\\"freeze HP\\\")\\n  fz.stop()\\n  const h = watch(ptr, \\\"u32\\\")       log every game write (hw watchpoint)\\n  h.stop()\\n\\nWatchpoints: frida-gum exposes per-thread hardware watchpoints\\n(ThreadDetails.setHardwareWatchpoint) \u2014 no callback, hits arrive as\\nexceptions through Process.setExceptionHandler. We arm every thread,\\nswallow watchpoint exceptions whose faulting address is ours, and let\\neverything else pass through to the OS.\",\n    \"functions\": [\n      {\n        \"name\": \"peek\",\n        \"signature\": \"function peek(addr: NativePointer, type: WatchType = \\\"u32\\\"): number | string\",\n        \"doc\": \"Read once, typed.\"\n      },\n      {\n        \"name\": \"poke\",\n        \"signature\": \"function poke(addr: NativePointer, value: number, type: WatchType = \\\"u32\\\"): boolean\",\n        \"doc\": \"Write once, typed. Returns false if the address is not writable.\"\n      },\n      {\n        \"name\": \"watch\",\n        \"signature\": \"function watch(addr: NativePointer, type: WatchType = \\\"u32\\\"): WatchHandle\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"unwatchAll\",\n        \"signature\": \"function unwatchAll(): void\",\n        \"doc\": \"Remove every armed watchpoint.\"\n      },\n      {\n        \"name\": \"freeze\",\n        \"signature\": \"function freeze(addr: NativePointer, value: number, type: WatchType = \\\"u32\\\", ms = 1): FreezeHandle\",\n        \"doc\": \"\"\n      },\n      {\n        \"name\": \"diff\",\n        \"signature\": \"function diff(before: ArrayBuffer, addr: NativePointer, len: number): string[]\",\n        \"doc\": \"Snapshot `addr[0..len]` and report which bytes differ from right now.\"\n      },\n      {\n        \"name\": \"snapshot\",\n        \"signature\": \"function snapshot(addr: NativePointer, len = 64): ArrayBuffer | null\",\n        \"doc\": \"Capture a snapshot for a later diff().\"\n      }\n    ]\n  }\n]\n",
+            "stderr": "",
+            "exitCode": 0,
+            "timedOut": false,
+            "durationMs": 30
+          },
+          {
+            "argv": [
+              "bun",
+              "src/bin.ts",
+              "depcheck"
+            ],
+            "stdout": "scanned 19 import edge(s) across agent/targets\n~ allowlisted  agent/targets/mecchachameleon/index.ts:8  \"./esp.js\"  [slice b2]\n~ allowlisted  agent/targets/piu/index.ts:7  \"frida-il2cpp-bridge\"  [slice b2]\n~ allowlisted  agent/targets/terraria/index.ts:19  \"./mono.js\"  [slice b1]\n",
+            "stderr": "",
+            "exitCode": 0,
+            "timedOut": false,
+            "durationMs": 29
+          },
+          {
+            "argv": [
+              "bun",
+              "src/bin.ts",
+              "depcheck",
+              "--json"
+            ],
+            "stdout": "{\n  \"violations\": [],\n  \"allowlisted\": [\n    {\n      \"file\": \"agent/targets/mecchachameleon/index.ts\",\n      \"line\": 8,\n      \"specifier\": \"./esp.js\",\n      \"resolved\": \"agent/targets/mecchachameleon/esp.js\",\n      \"slice\": \"b2\",\n      \"drifted\": false\n    },\n    {\n      \"file\": \"agent/targets/piu/index.ts\",\n      \"line\": 7,\n      \"specifier\": \"frida-il2cpp-bridge\",\n      \"resolved\": null,\n      \"slice\": \"b2\",\n      \"drifted\": false\n    },\n    {\n      \"file\": \"agent/targets/terraria/index.ts\",\n      \"line\": 19,\n      \"specifier\": \"./mono.js\",\n      \"resolved\": \"agent/targets/terraria/mono.js\",\n      \"slice\": \"b1\",\n      \"drifted\": false\n    }\n  ],\n  \"staleAllowlist\": [],\n  \"scanned\": 19\n}\n",
+            "stderr": "",
+            "exitCode": 0,
+            "timedOut": false,
+            "durationMs": 29
+          }
+        ]
+      }
+    },
+    {
+      "receipt": "depcheck-deep-relative.json",
+      "data": {
+        "surface": "depcheck-deep-relative",
+        "cwd": "/Users/sunwoo/work/frida-labs",
+        "timestamp": "2026-08-03T14:22:52.773959+00:00",
+        "command": {
+          "argv": [
+            "bun",
+            "src/bin.ts",
+            "depcheck"
+          ],
+          "stdout": "scanned 20 import edge(s) across agent/targets\n~ allowlisted  agent/targets/mecchachameleon/index.ts:8  \"./esp.js\"  [slice b2]\n~ allowlisted  agent/targets/piu/index.ts:7  \"frida-il2cpp-bridge\"  [slice b2]\n~ allowlisted  agent/targets/terraria/index.ts:19  \"./mono.js\"  [slice b1]\n\u2717 violation  agent/targets/tmpredteam/index.ts:1  \"../../package.json\"  \u2014 targets may only import agent/lib\n",
+          "stderr": "",
+          "exitCode": 1,
+          "timedOut": false,
+          "durationMs": 34
+        }
+      }
+    },
+    {
+      "receipt": "depcheck-leftpad.json",
+      "data": {
+        "surface": "depcheck-leftpad",
+        "cwd": "/Users/sunwoo/work/frida-labs",
+        "timestamp": "2026-08-03T14:22:38.301788+00:00",
+        "command": {
+          "argv": [
+            "bun",
+            "src/bin.ts",
+            "depcheck"
+          ],
+          "stdout": "scanned 20 import edge(s) across agent/targets\n~ allowlisted  agent/targets/mecchachameleon/index.ts:8  \"./esp.js\"  [slice b2]\n~ allowlisted  agent/targets/piu/index.ts:7  \"frida-il2cpp-bridge\"  [slice b2]\n~ allowlisted  agent/targets/terraria/index.ts:19  \"./mono.js\"  [slice b1]\n\u2717 violation  agent/targets/tmpredteam/index.ts:1  \"leftpad\"  \u2014 targets may only import agent/lib\n",
+          "stderr": "",
+          "exitCode": 1,
+          "timedOut": false,
+          "durationMs": 33
+        }
+      }
+    },
+    {
+      "receipt": "depcheck-parser-redteam.json",
+      "data": {
+        "surface": "depcheck parser red-team",
+        "cwd": "/Users/sunwoo/work/frida-labs",
+        "command": {
+          "argv": [
+            "bun",
+            "/tmp/flab-qa/depcheck_parser_redteam.ts"
+          ],
+          "stdout": "{\"commentOnly\":[{\"file\":\"agent/targets/parser/index.ts\",\"line\":1,\"specifier\":\"leftpad\",\"resolved\":null}],\"stringOnly\":[{\"file\":\"agent/targets/parser/index.ts\",\"line\":1,\"specifier\":\"leftpad\",\"resolved\":null}],\"requireSyntax\":{\"edges\":[],\"compile\":{\"ok\":true,\"bundleContainsOutside\":true}},\"importEqualsSyntax\":{\"edges\":[],\"compile\":{\"ok\":true,\"bundleContainsOutside\":true}}}\n",
+          "stderr": "",
+          "exitCode": 0
+        },
+        "result": {
+          "commentOnly": [
+            {
+              "file": "agent/targets/parser/index.ts",
+              "line": 1,
+              "specifier": "leftpad",
+              "resolved": null
+            }
+          ],
+          "stringOnly": [
+            {
+              "file": "agent/targets/parser/index.ts",
+              "line": 1,
+              "specifier": "leftpad",
+              "resolved": null
+            }
+          ],
+          "requireSyntax": {
+            "edges": [],
+            "compile": {
+              "ok": true,
+              "bundleContainsOutside": true
+            }
+          },
+          "importEqualsSyntax": {
+            "edges": [],
+            "compile": {
+              "ok": true,
+              "bundleContainsOutside": true
+            }
+          }
+        },
+        "finding": "IMPORT_RE is lexical rather than syntax-aware: it reports imports in comments/strings, and misses require()/TypeScript import-equals dependencies that frida.Compiler successfully bundles."
+      }
+    },
+    {
+      "receipt": "depcheck-static-cleanup.json",
+      "data": {
+        "surface": "depcheck static line-drift fallback and cleanup",
+        "timestamp": "2026-08-03T14:23:14.463398+00:00",
+        "path": "/Users/sunwoo/work/frida-labs/src/core/depcheck.ts",
+        "fallbackPresent": true,
+        "evidence": {
+          "fallbackComment": [
+            {
+              "line": 104,
+              "text": "// Line-drift fallback: same file + specifier, moved line."
+            }
+          ],
+          "fallbackMatch": [
+            {
+              "line": 105,
+              "text": "const drift = DEP_ALLOWLIST.find((a) => a.file === e.file && a.specifier === e.specifier);"
+            }
+          ],
+          "driftFlag": [
+            {
+              "line": 107,
+              "text": "allowlisted.push({ ...e, slice: drift.slice, drifted: true });"
+            }
+          ]
+        },
+        "cleanup": {
+          "argv": [
+            "git",
+            "status",
+            "--porcelain",
+            "agent/targets"
+          ],
+          "stdout": " M agent/targets/adofai/index.ts\n M agent/targets/mecchachameleon/index.ts\n M agent/targets/piu/index.ts\n?? agent/targets/_probe/\n?? agent/targets/terraria/\n",
+          "stderr": "",
+          "exitCode": 0,
+          "tmpredteamPresent": false,
+          "filesystemExists": false
+        }
+      }
+    },
+    {
+      "receipt": "describe-fallback.json",
+      "data": {
+        "surface": "describe-fallback",
+        "cwd": "/Users/sunwoo/work/frida-labs",
+        "timestamp": "2026-08-03T14:24:35.551334+00:00",
+        "command": {
+          "argv": [
+            "bun",
+            "/tmp/flab-qa/describe_fallback.ts"
+          ],
+          "stdout": "[+] _probe: no known engine detected \u2014 native-only surface\n{\"ok\":true,\"before\":[],\"called\":[],\"after\":[{\"name\":\"engines\"}]}\n",
+          "stderr": "",
+          "exitCode": 0,
+          "timedOut": false,
+          "durationMs": 599
+        }
+      }
+    },
+    {
+      "receipt": "lifecycle-cleanup-static.json",
+      "data": {
+        "surface": "lifecycle cleanup static review",
+        "evidence": {
+          "src/core/session.ts:118-119": [
+            "if (opts.spawnGating) await enableSpawnGating(device);",
+            "const unwatchLifecycle = watchLifecycle(device, ev);"
+          ],
+          "src/core/session.ts:229-235": [
+            "close marks closed, stops the entry watcher, unsubscribes lifecycle signals, unloads the script, and detaches the session",
+            "close does not call device.disableSpawnGating()"
+          ],
+          "src/core/lifecycle.ts:92-94": [
+            "enableSpawnGating only calls device.enableSpawnGating()"
+          ],
+          "sourceSearch": {
+            "pattern": "disableSpawnGating|enableSpawnGating",
+            "disableSpawnGatingMatches": 0,
+            "enableSpawnGatingCallSites": [
+              "src/core/lifecycle.ts:92-93",
+              "src/core/session.ts:118"
+            ],
+            "fridaDisableApi": "node_modules/frida/build/src/frida_binding.d.ts:145 declares Device.disableSpawnGating()"
+          }
+        },
+        "finding": "A session that sets spawnGating enables Device-global gating but neither GameSession.close() nor a startSession failure path disables it. Lifecycle subscriptions created before attach/inject failures likewise have no cleanup path."
+      }
+    },
+    {
+      "receipt": "probe-run-equivalence.json",
+      "data": {
+        "surface": "probe and run evalOnce equivalence",
+        "timestamp": "2026-08-03T14:24:16.179609+00:00",
+        "cwd": "/Users/sunwoo/work/frida-labs",
+        "commands": [
+          {
+            "argv": [
+              "bun",
+              "src/bin.ts",
+              "probe",
+              "sleeper",
+              "--json"
+            ],
+            "stdout": "compiling agent/targets/_probe/index.ts \u2026\nattaching to sleeper \u2026\n[+] _probe: no known engine detected \u2014 native-only surface\n[agent] [+] _probe: no known engine detected \u2014 native-only surface\n[+] agent live in sleeper (pid 58884)\n{\"result\":[]}\n",
+            "stderr": "",
+            "exitCode": 0,
+            "timedOut": false,
+            "durationMs": 682,
+            "resultPayloads": [
+              {
+                "result": []
+              }
+            ]
+          },
+          {
+            "argv": [
+              "bun",
+              "src/bin.ts",
+              "run",
+              "agent/targets/_probe/index.ts",
+              "--proc",
+              "sleeper",
+              "--no-watch",
+              "--eval",
+              "await engines()",
+              "--json"
+            ],
+            "stdout": "compiling agent/targets/_probe/index.ts \u2026\nattaching to sleeper \u2026\n[+] _probe: no known engine detected \u2014 native-only surface\n[agent] [+] _probe: no known engine detected \u2014 native-only surface\n[+] agent live in sleeper (pid 58884)\n{\"result\":[]}\n",
+            "stderr": "",
+            "exitCode": 0,
+            "timedOut": false,
+            "durationMs": 534,
+            "resultPayloads": [
+              {
+                "result": []
+              }
+            ]
+          }
+        ],
+        "identicalResultPayloads": true,
+        "compared": {
+          "probe": {
+            "result": []
+          },
+          "run": {
+            "result": []
+          }
+        }
+      }
+    }
+  ]
+}

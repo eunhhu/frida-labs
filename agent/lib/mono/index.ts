@@ -40,6 +40,10 @@ interface Api {
   fieldName(f: Ptr): Ptr;
   fieldOffset(f: Ptr): number;
   compile(mth: Ptr): Ptr;
+  invoke(mth: Ptr, obj: Ptr, argv: Ptr, exc: Ptr): Ptr;
+  stringNew(d: Ptr, s: Ptr): Ptr;
+  stringChars(s: Ptr): Ptr;
+  objectGetClass(o: Ptr): Ptr;
 }
 
 let api: Api | null = null;
@@ -68,6 +72,10 @@ function init(): Api {
     fieldName: P("mono_field_get_name", "pointer", ["pointer"]),
     fieldOffset: P("mono_field_get_offset", "int", ["pointer"]),
     compile: P("mono_compile_method", "pointer", ["pointer"]),
+    invoke: P("mono_runtime_invoke", "pointer", ["pointer", "pointer", "pointer", "pointer"]),
+    stringNew: P("mono_string_new", "pointer", ["pointer", "pointer"]),
+    stringChars: P("mono_string_chars", "pointer", ["pointer"]),
+    objectGetClass: P("mono_object_get_class", "pointer", ["pointer"]),
   };
   api.attach(api.root()); // attach the Frida thread so managed calls are safe
   return api;
@@ -184,5 +192,39 @@ export const mono = {
       onEnter() { console.log(`[mono] -> ${name}`); },
       onLeave(ret) { console.log(`[mono] <- ${name} = ${ret}`); },
     });
+  },
+
+  /** Call a managed method. obj NULL for static; value-type args by pointer. */
+  invoke(method: Ptr, obj: Ptr | null, argPtrs: Ptr[] = []): Ptr {
+    const a = init();
+    const argv = Memory.alloc(Math.max(1, argPtrs.length) * Process.pointerSize);
+    argPtrs.forEach((p, i) => argv.add(i * Process.pointerSize).writePointer(p));
+    const exc = Memory.alloc(Process.pointerSize);
+    exc.writePointer(ptr(0));
+    const ret: Ptr = a.invoke(method, obj ?? ptr(0), argv, exc);
+    if (!exc.readPointer().isNull()) throw new Error("[mono] managed exception during invoke");
+    return ret;
+  },
+
+  /** New managed System.String from a JS string. */
+  string(s: string): Ptr {
+    const a = init();
+    return a.stringNew(a.root(), u(s));
+  },
+
+  /** Read a managed System.String back to a JS string. */
+  readString(s: Ptr): string {
+    if (s.isNull()) return "";
+    const a = init();
+    const chars: Ptr = a.stringChars(s);
+    try { return chars.readUtf16String() ?? ""; } catch { return ""; }
+  },
+
+  /** Class name of a live managed object (follows its MonoObject header). */
+  objectClass(obj: Ptr): string | null {
+    const a = init();
+    const k: Ptr = a.objectGetClass(obj);
+    if (k.isNull()) return null;
+    return cstr(a.className(k));
   },
 };

@@ -1,0 +1,150 @@
+{
+  "compatibility" : {
+    "osIDs" : [
+      "macos"
+    ],
+    "platforms" : [
+      "darwin"
+    ]
+  },
+  "entrypoint" : "main.ts",
+  "features" : [
+    {
+      "enabledByDefault" : true,
+      "id" : "god",
+      "name" : "God Mode (Infinite HP)",
+      "optional" : false,
+      "schema" : {
+        "default" : true,
+        "kind" : "boolean"
+      }
+    },
+    {
+      "enabledByDefault" : true,
+      "id" : "mana",
+      "name" : "Infinite Mana",
+      "optional" : false,
+      "schema" : {
+        "default" : true,
+        "kind" : "boolean"
+      }
+    },
+    {
+      "enabledByDefault" : true,
+      "id" : "breath",
+      "name" : "Infinite Breath",
+      "optional" : false,
+      "schema" : {
+        "default" : true,
+        "kind" : "boolean"
+      }
+    },
+    {
+      "enabledByDefault" : true,
+      "id" : "nokb",
+      "name" : "No Knockback",
+      "optional" : false,
+      "schema" : {
+        "default" : true,
+        "kind" : "boolean"
+      }
+    },
+    {
+      "enabledByDefault" : true,
+      "id" : "fly",
+      "name" : "Infinite Flight",
+      "optional" : false,
+      "schema" : {
+        "default" : true,
+        "kind" : "boolean"
+      }
+    },
+    {
+      "enabledByDefault" : true,
+      "id" : "env",
+      "name" : "Environmental Immunity",
+      "optional" : false,
+      "schema" : {
+        "default" : true,
+        "kind" : "boolean"
+      }
+    },
+    {
+      "enabledByDefault" : true,
+      "id" : "maxsummon",
+      "name" : "Max Summons (99 slots)",
+      "optional" : false,
+      "schema" : {
+        "default" : true,
+        "kind" : "boolean"
+      }
+    },
+    {
+      "enabledByDefault" : true,
+      "id" : "fastuse",
+      "name" : "Instant Item Use (no cooldown)",
+      "optional" : false,
+      "schema" : {
+        "default" : true,
+        "kind" : "boolean"
+      }
+    },
+    {
+      "enabledByDefault" : true,
+      "id" : "maptp",
+      "name" : "Map Right-Click Teleport",
+      "optional" : false,
+      "schema" : {
+        "default" : true,
+        "kind" : "boolean"
+      }
+    }
+  ],
+  "icon" : {
+    "kind" : "symbolic",
+    "value" : "wand-stars"
+  },
+  "name" : "Terraria Trainer",
+  "widgets" : [
+    {
+      "id" : "stats",
+      "kind" : {
+        "config" : {
+          "actions" : [
+
+          ],
+          "columns" : [
+            {
+              "alignment" : "leading",
+              "id" : "k",
+              "name" : "Stat"
+            },
+            {
+              "alignment" : "trailing",
+              "id" : "v",
+              "name" : "Value"
+            }
+          ],
+          "maxRows" : 1000
+        },
+        "kind" : "table"
+      },
+      "name" : "Live Stats",
+      "persistence" : "none"
+    },
+    {
+      "id" : "console",
+      "kind" : {
+        "config" : {
+          "maxEntries" : 1000,
+          "placeholder" : "give <type> [stack] [prefix] | dupe <slot> [count] | tp <x> <y> | tpc | summon <n> | mapreveal | heal | time | \/god | help",
+          "prompt" : "›",
+          "runButtonLabel" : "Run"
+        },
+        "kind" : "console"
+      },
+      "name" : "Trainer Console",
+      "persistence" : "none"
+    }
+  ]
+}

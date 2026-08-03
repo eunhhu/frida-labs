@@ -1,0 +1,62 @@
+{
+  "kind": "black-box-api-receipt",
+  "surface": "api/package",
+  "module": "src/core/index.ts",
+  "importDurationMs": 22,
+  "importSideEffectWrites": [],
+  "sameInstanceOnReimport": true,
+  "expectedFunctions": [
+    "startSession",
+    "evalOnce",
+    "depcheck",
+    "findImportEdges",
+    "scaffold",
+    "libReference",
+    "renderLibText",
+    "renderHelp",
+    "compileAgent",
+    "compileEntry",
+    "watchEntry",
+    "loadManifest",
+    "listTargets",
+    "getTarget",
+    "watchLifecycle",
+    "enableSpawnGating"
+  ],
+  "expectedObjects": [
+    "commands",
+    "DEP_ALLOWLIST"
+  ],
+  "missing": [],
+  "commandRegistry": [
+    "targets",
+    "new",
+    "build",
+    "run",
+    "probe",
+    "lib",
+    "depcheck",
+    "doctor"
+  ],
+  "depAllowlist": [
+    {
+      "file": "agent/targets/terraria/index.ts",
+      "line": 19,
+      "specifier": "./mono.js",
+      "slice": "b1"
+    },
+    {
+      "file": "agent/targets/mecchachameleon/index.ts",
+      "line": 8,
+      "specifier": "./esp.js",
+      "slice": "b2"
+    },
+    {
+      "file": "agent/targets/piu/index.ts",
+      "line": 7,
+      "specifier": "frida-il2cpp-bridge",
+      "slice": "b2"
+    }
+  ],
+  "verdict": "passed"
+}

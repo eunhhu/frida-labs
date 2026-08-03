@@ -1,0 +1,72 @@
+^D=== flab targets --json ===
+[
+  {
+    "name": "mecchachameleon",
+    "process": "PenguinHotel-Win64-Shipping.exe",
+    "mode": "attach",
+    "entry": "agent/targets/mecchachameleon/index.ts"
+  },
+  {
+    "name": "piu",
+    "process": "PUMP IT UP RISE.exe",
+    "mode": "attach",
+    "entry": "agent/targets/piu/index.ts"
+  },
+  {
+    "name": "terraria",
+    "process": "Terraria.exe",
+    "mode": "attach",
+    "entry": "agent/targets/terraria/index.ts",
+    "processByPlatform": {
+      "darwin": "Terraria.bin.osx"
+    }
+  },
+  {
+    "name": "adofai",
+    "process": "A Dance of Fire and Ice.exe",
+    "mode": "attach",
+    "entry": "agent/targets/adofai/index.ts",
+    "processByPlatform": {
+      "darwin": "A Dance of Fire and Ice"
+    }
+  }
+]
+=== flab depcheck ===
+scanned 19 import edge(s) across agent/targets
+~ allowlisted  agent/targets/mecchachameleon/index.ts:8  "./esp.js"  [slice b2]
+~ allowlisted  agent/targets/piu/index.ts:7  "frida-il2cpp-bridge"  [slice b2]
+~ allowlisted  agent/targets/terraria/index.ts:19  "./mono.js"  [slice b1]
+rc=0
+=== flab doctor ===
+✓ runtime    v24.3.0 (darwin/arm64)
+✓ frida      server unknown
+✓ device     local device reachable, 520 processes visible
+✓ manifest   4 targets
+=== flab lib (head) ===
+
+## agent/lib/cocos.ts
+Cocos2d-x helpers. Cocos has no stable C ABI across builds — most games
+  function findCocos(): CocosModule | null  — Locate the cocos2d runtime module, or null when the game is not cocos.
+  function symbols(re: RegExp, mod?: Module): Array<{ name: string; address: string }>  — All cocos symbols/exports whose name matches `re`.
+  function hookMainLoop(onFrame: () => void): InvocationListener | null
+
+## agent/lib/detect.ts
+Engine / managed-runtime detection — reusable across every target.
+  if(main.enumerateExports().some((e)  — Module the detector matched on (main module for unreal/cocos fallbacks).
+  function detectAll(): EngineInfo[]  — Every engine that matched, best guess first. Empty on a bare native process.
+  function detect(): EngineInfo | null  — Single best guess (first match), or null for a bare native process.
+=== flab help (head) ===
+flab — cross-game Frida workspace tool
+
+commands:
+  flab targets [--json]
+      List registered targets (name, process, mode, entry).
+  flab new <name> ["Game.exe"] [--proc "Game.exe"] [--json]
+      Scaffold a new target and register it in frida-labs.json.
+  flab build <target> [--out file]
+      Compile a target's agent bundle without injecting.
+  flab run <target> [--proc P] [--spawn] [--eval "code"] [--no-watch] [--json]
+      Compile, attach, inject, then REPL (or one-shot --eval). Hot reload on save.
+  flab probe <process> [--eval "code"] [--json]
+      Inject the engine-agnostic probe agent into any process and report what it sees.
+  flab lib [--json]

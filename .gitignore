@@ -21,3 +21,10 @@ bun-debug.log*
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# agents
+.gjc/
+!.gjc/skills/*/*.md
+
+# compile
+*.bun-build

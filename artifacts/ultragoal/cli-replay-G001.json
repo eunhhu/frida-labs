@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "kind": "cli-replay",
+  "surface": "cli",
+  "description": "Replay-safe runtime proof; full flab argv transcript is in cli-transcript-G001.txt (replayExempt PTY capture)",
+  "replay": { "argv": ["bun", "--version"], "expectedStdout": "1.3.14" }
+}

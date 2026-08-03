@@ -1,5 +1,5 @@
 // Target entry: PIU (Unity / IL2CPP rhythm game) — judgment correction.
-// Build:  bun run build:piu
+// Build:  flab build piu   ·   Run:  flab run piu
 //
 // Demonstrates the IL2CPP side of the lib. Rebalances hit judgments toward
 // PERFECT with a weighted table.

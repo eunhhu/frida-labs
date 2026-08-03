@@ -1,25 +1,34 @@
 {
-  "name": "frida-labs",
+  "name": "flab",
   "version": "1.0.0",
-  "description": "Cross-game Frida debugging workspace: reusable lib + per-target scripts + Bun host client",
+  "description": "Cross-game Frida workspace tool — single CLI/TUI for building, injecting, and driving game agents",
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "bun host/client.ts",
-    "build": "bun host/client.ts --build",
-    "typecheck": "tsc -p tsconfig.json && tsc -p host/tsconfig.json"
+    "flab": "bun src/bin.ts",
+    "tui": "bun src/bin.ts tui",
+    "depcheck": "bun src/bin.ts depcheck",
+    "typecheck": "tsc -p tsconfig.json && tsc -p src/tsconfig.json",
+    "build-bin": "bun build --compile src/launcher.ts --outfile flab"
   },
   "dependencies": {
-    "frida": "^17.16.4"
+    "frida": "^17.16.4",
+    "ink": "^7.1.1",
+    "react": "^19.2.8"
   },
   "devDependencies": {
-    "@types/frida-gum": "^19.0.0",
-    "@types/node": "^18.14.0",
+    "@types/frida-gum": "^19.10.0",
+    "@types/node": "^18.19.130",
+    "@types/react": "^19.2.18",
     "frida-compile": "^19.0.5",
     "frida-il2cpp-bridge": "^0.13.1",
+    "react-devtools-core": "^7.0.1",
     "typescript": "^7.0.2"
   },
   "trustedDependencies": [
     "frida"
-  ]
+  ],
+  "bin": {
+    "flab": "src/bin.ts"
+  }
 }
