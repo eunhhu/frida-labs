@@ -13,8 +13,8 @@ const esp = new ue.Esp();
 rpc.exports = {
   info() {
     return {
-      module: ue.gameModule.name,
-      base: ue.gameModule.base.toString(),
+      module: ue.gameModule().name,
+      base: ue.gameModule().base.toString(),
       objects: ue.oa().num,
       gobjects: ue.oa().objects.toString(),
       gnames: ue.gnames().toString(),
@@ -57,4 +57,4 @@ rpc.exports = {
   },
 };
 
-ok(`mecchachameleon agent ready — ${ue.oa().num} objects @ ${ue.gameModule.name}`);
+ok(`mecchachameleon agent ready — ${ue.oa().num} objects @ ${ue.gameModule().name}`);

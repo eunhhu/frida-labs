@@ -6,13 +6,18 @@
 
 import { rP, rU16, rU32, mainModule, moduleByPattern } from "../mem.js";
 
-const MOD = moduleByPattern(/-Win64-Shipping\.exe$/i) ?? mainModule();
-const LO = MOD.base;
-const HI = MOD.base.add(MOD.size);
-export const gameModule = MOD;
+let cachedMod: Module | null = null;
 
-export const inModule = (p: NativePointer | null): boolean =>
-  !!p && p.compare(LO) >= 0 && p.compare(HI) < 0;
+/** Lazily resolved game module — NEVER at import (lib invariant). */
+export function gameModule(): Module {
+  return (cachedMod ??= moduleByPattern(/-Win64-Shipping\.exe$/i) ?? mainModule());
+}
+
+export const inModule = (p: NativePointer | null): boolean => {
+  if (!p) return false;
+  const m = gameModule();
+  return p.compare(m.base) >= 0 && p.compare(m.base.add(m.size)) < 0;
+};
 
 export const O = {
   CLASS: 0x10, NAME: 0x18, OUTER: 0x20, FLAGS: 0x08,

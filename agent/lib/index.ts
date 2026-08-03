@@ -2,8 +2,8 @@
 // Import in any target: `import { modules, exports, trace, ue } from "../../lib/index.js";`
 //
 // Side-effect invariant: importing this barrel must never touch the target
-// process beyond pure module-eval (the UE namespace still runs reflection
-// discovery at import for historical reasons — only UE targets import `ue`).
+// process — every module, `ue` included, defers all process access to first
+// call (gameModule()/oa()/gnames() are memoized lazy accessors).
 // The Unity/IL2CPP helpers are intentionally NOT re-exported here — pulling
 // in the IL2CPP bridge would bloat/break non-Unity targets; Unity targets
 // import "./il2cpp.js" directly. The objc/java bridges stay behind lazy

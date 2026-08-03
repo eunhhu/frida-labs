@@ -8,8 +8,9 @@ import { withVerification, type Verification } from "./hook.js";
 
 /**
  * Lib-owned Il2Cpp.perform wrapper (Phase B plan obligation: targets call the
- * lib surface, not the ambient bridge global). The bridge schedules `fn` on
- * the IL2CPP main thread; the returned Promise resolves with fn's result.
+ * lib surface, not the ambient bridge global). Default bridge semantics:
+ * "bind" — `fn` runs on the calling thread attached to the IL2CPP domain
+ * (same as the ambient global); resolves with fn's result.
  */
 export function perform<T>(fn: () => T | Promise<T>): Promise<T> {
   return Il2Cpp.perform(fn);
