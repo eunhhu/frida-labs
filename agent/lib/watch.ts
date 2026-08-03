@@ -8,10 +8,12 @@
 //
 // Watchpoints: frida-gum exposes per-thread hardware watchpoints
 // (ThreadDetails.setHardwareWatchpoint) — no callback, hits arrive as
-// exceptions through Process.setExceptionHandler. We arm every thread,
-// swallow watchpoint exceptions whose faulting address is ours, and let
-// everything else pass through to the OS.
+// exceptions dispatched by the shared handler owned by excrash.ts
+// (addExceptionHandler, swallow=true). We arm every thread, swallow
+// watchpoint exceptions whose faulting address is ours, and let everything
+// else pass through to the remaining handlers and finally the OS.
 
+import { addExceptionHandler } from "./excrash.js";
 import { ok, warn } from "./log.js";
 
 export type WatchType = "u8" | "u16" | "u32" | "u64" | "s32" | "float" | "double" | "pointer";
@@ -62,7 +64,10 @@ let handlerInstalled = false;
 function installExceptionHandler(): void {
   if (handlerInstalled) return;
   handlerInstalled = true;
-  Process.setExceptionHandler((exc) => {
+  // Registered through the shared dispatcher owned by excrash.ts — NEVER
+  // call Process.setExceptionHandler directly. swallow=true so our routine
+  // watchpoint traps are handled before any observer (crash reporting).
+  addExceptionHandler("watch", (exc) => {
     const hitAddr = exc.memory?.address;
     if (!hitAddr) return false; // not a memory fault — let the OS deal with it
     for (const w of active.values()) {
@@ -76,7 +81,7 @@ function installExceptionHandler(): void {
       }
     }
     return false;
-  });
+  }, true);
 }
 
 /**

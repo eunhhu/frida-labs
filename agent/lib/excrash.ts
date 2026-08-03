@@ -2,10 +2,12 @@
 // Side-effect free at import: the exception handler is installed ONLY by an
 // explicit install() call.
 //
-// OWNERSHIP (b4 design task + architect review): Process.setExceptionHandler
-// is process-global — watch.ts dispatch piggybacking vs a shared dispatcher
-// here is an open choice. Until b4 lands that decision, install() takes full
-// ownership and refuses to double-install. NEVER install at module-eval time.
+// OWNERSHIP (b4 decision, architect-approved direction): this module owns the
+// single process-global Process.setExceptionHandler via a shared dispatcher.
+// Consumers (watch.ts hardware watchpoints, install() crash reporting)
+// register handlers; first handler returning true swallows the exception.
+// The dispatcher arms lazily on the FIRST registration — import stays
+// side-effect free. NEVER call Process.setExceptionHandler outside this file.
 
 import { log, ok } from "./log.js";
 import { symbolicate } from "./sym.js";
@@ -31,6 +33,44 @@ export interface ExCrashSession {
 }
 
 const MAX_REPORTS = 16;
+type Handler = (details: ExceptionDetails) => boolean;
+const handlers: Array<{ id: string; fn: Handler; swallow: boolean }> = [];
+let dispatcherArmed = false;
+
+function armDispatcher(): void {
+  if (dispatcherArmed) return;
+  dispatcherArmed = true;
+  Process.setExceptionHandler((exc) => {
+    for (const h of handlers) {
+      try { if (h.fn(exc)) return true; } catch { /* a broken handler must not kill the chain */ }
+    }
+    return false;
+  });
+}
+
+/**
+ * Register an exception handler under a unique id. Returns an idempotent
+ * unregister. Handlers with swallow=true (e.g. hardware watchpoints) always
+ * run BEFORE observers like crash reporting — observers must never see
+ * routine swallowed traps as crashes. Within the same class, registration
+ * order is dispatch order. This is the ONLY sanctioned way to hook process
+ * exceptions.
+ */
+export function addExceptionHandler(id: string, fn: Handler, swallow = false): () => void {
+  if (handlers.some((h) => h.id === id)) throw new Error(`exception handler '${id}' already registered`);
+  armDispatcher();
+  const entry = { id, fn, swallow };
+  // Swallowing handlers keep relative order and always precede observers.
+  const idx = swallow ? handlers.filter((h) => h.swallow).length : handlers.length;
+  handlers.splice(idx, 0, entry);
+  let gone = false;
+  return () => {
+    if (gone) return;
+    gone = true;
+    const i = handlers.findIndex((h) => h.id === id);
+    if (i >= 0) handlers.splice(i, 1);
+  };
+}
 
 /** Build a structured report from a gum exception. */
 export function buildReport(details: ExceptionDetails): CrashReport {
@@ -64,9 +104,10 @@ export function buildReport(details: ExceptionDetails): CrashReport {
 }
 
 /**
- * Install the process exception handler and collect structured reports.
- * Throws when a handler is already installed by this module — handler
- * ownership is exclusive until the b4 dispatcher decision lands.
+ * Install crash reporting through the shared dispatcher and collect
+ * structured reports. Report-only: the registered observer never swallows —
+ * fatal faults still propagate after every handler ran. Double install()
+ * throws via the dispatcher's unique-id rule.
  */
 export function install(onReport?: (r: CrashReport) => void): ExCrashSession {
   let handler: ((details: ExceptionDetails) => boolean) | null = null;
@@ -87,15 +128,15 @@ export function install(onReport?: (r: CrashReport) => void): ExCrashSession {
     return false;
   };
 
-  Process.setExceptionHandler(handler);
+  const unregister = addExceptionHandler("excrash", (details) => handler!(details));
   ok("excrash handler installed (report-only; faults still propagate)");
 
   return {
     reports,
     uninstall() {
       if (!handler) return;
-      Process.setExceptionHandler(() => false);
       handler = null;
+      unregister();
       ok("excrash handler removed");
     },
   };
