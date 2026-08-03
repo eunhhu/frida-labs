@@ -21,6 +21,8 @@
 // importing this module never produces side effects.
 
 import { resolveMonoModule, BAKED_MODULES } from "./runtime.js";
+import { withVerification, type Verification } from "../hook.js";
+import { log } from "../log.js";
 
 type Ptr = NativePointer;
 
@@ -192,6 +194,15 @@ export function createMono(opts: MonoOptions = {}) {
       objectGetClass: P("mono_object_get_class", "pointer", ["pointer"]),
     };
     api.attach(api.root()); // attach the Frida thread so managed calls are safe
+    // Rosetta heuristic gate (best effort): on darwin an x64 process on Apple
+    // Silicon runs translated, and Mono's JIT output can break Interceptor
+    // there — warn once so unverified hooks are read correctly.
+    if (Process.platform === "darwin" && Process.arch === "x64") {
+      log(
+        "[mono] x64 process on darwin (heuristic: likely Rosetta) — Mono JIT code may evade " +
+          "Interceptor on translated processes; treat verified:false hooks accordingly",
+      );
+    }
     return api;
   }
 
@@ -312,16 +323,22 @@ export function createMono(opts: MonoOptions = {}) {
       return p.isNull() ? null : p;
     },
 
-    /** Attach a logging tracer to a managed method (enter/leave). Returns the listener. */
-    trace(method: Ptr | null, label?: string): InvocationListener | null {
+    /**
+     * Attach a logging tracer to a managed method (enter/leave), firing-verified
+     * via the shared hook core (#3752-safe: distinguish silent attach from an
+     * unhit trigger). Truthy on success so `mono.trace(m) ? …` keeps working.
+     */
+    trace(method: Ptr | null, label?: string): Verification | null {
       const addr = surface.addressOf(method);
       if (!addr) return null;
       const a = init();
       const name = label ?? cstr(a.methodFullName(method as Ptr, 1)) ?? addr.toString();
-      return Interceptor.attach(addr, {
-        onEnter() { console.log(`[mono] -> ${name}`); },
+      const listener = Interceptor.attach(addr, {
+        onEnter() { v.note(); console.log(`[mono] -> ${name}`); },
         onLeave(ret) { console.log(`[mono] <- ${name} = ${ret}`); },
       });
+      const v = withVerification(listener, `mono.trace ${name}`);
+      return v;
     },
 
     /**

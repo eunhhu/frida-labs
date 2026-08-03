@@ -4,6 +4,7 @@
 
 import "frida-il2cpp-bridge";
 import { ok } from "./log.js";
+import { withVerification, type Verification } from "./hook.js";
 
 export function classes(q: string, assembly = "Assembly-CSharp"): Il2Cpp.Class[] {
   const image = Il2Cpp.domain.assembly(assembly).image;
@@ -21,11 +22,23 @@ export function methods(q: string, assembly = "Assembly-CSharp"): Il2Cpp.Method[
   return results;
 }
 
-/** Trace-hook one or many IL2CPP methods, logging args/return; optionally override args/return. */
-export function hook(m: Il2Cpp.Method | Il2Cpp.Method[], overrideArgs?: unknown[], overrideRet?: unknown): void {
-  if (Array.isArray(m)) { m.forEach((x) => hook(x, overrideArgs, overrideRet)); return; }
+/** Trace-hook one or many IL2CPP methods, logging args/return; optionally override args/return.
+ *  Each hooked method is firing-verified; collect Verification handles via the returned map. */
+export function hook(
+  m: Il2Cpp.Method | Il2Cpp.Method[],
+  overrideArgs?: unknown[],
+  overrideRet?: unknown,
+  verifications?: Map<string, Verification>,
+): void {
+  if (Array.isArray(m)) { m.forEach((x) => hook(x, overrideArgs, overrideRet, verifications)); return; }
   ok(`hook ${m.class.fullName}::${m.name}`);
+  const key = `${m.class.fullName}::${m.name}`;
+  // Il2Cpp method hooks fire through the bridge trampoline; count via the
+  // implementation wrapper itself.
+  const v = withVerification({ detach: () => { m.implementation = null as never; } }, `il2cpp ${key}`);
+  verifications?.set(key, v);
   m.implementation = function (this: Il2Cpp.Class | Il2Cpp.Object | Il2Cpp.ValueType, ...args: unknown[]): Il2Cpp.Method.ReturnType {
+    v.note();
     const ret = this.method(m.name).invoke(...((overrideArgs ?? args) as Il2Cpp.Parameter.Type[]));
     ok(`${m.name}() args=${JSON.stringify(args)} ret=${ret}`);
     return (overrideRet ?? ret) as Il2Cpp.Method.ReturnType;

@@ -6,6 +6,8 @@
       "name": "frid-agent",
       "dependencies": {
         "frida": "^17.16.4",
+        "frida-java-bridge": "^7.0.13",
+        "frida-objc-bridge": "^8.0.6",
         "ink": "^7.1.1",
         "react": "^19.2.8",
       },
@@ -133,6 +135,10 @@
     "frida-compile": ["frida-compile@19.0.5", "", { "dependencies": { "chalk": "^5.4.1", "commander": "^14.0.0", "frida": "^17.8.0" }, "bin": { "frida-compile": "dist/cli.js" } }, "sha512-dHkZBswL6zzF63bcqK2AaXOrZTYIk4ZynJhcI1EP+dFRtmCx1nhMQH/dFZfkgcS5yoP6nabA/Ra2IUji3j3GOg=="],
 
     "frida-il2cpp-bridge": ["frida-il2cpp-bridge@0.13.1", "", { "bin": { "frida-il2cpp-bridge": "cli/main.py" } }, "sha512-qXjdcdI+KM5wnjCwqZTe/Tas/2pClXpDhcVWjiaQFxzSun+1vaoHEWlnMe4F09Vdz/vGkkjFOPKfvDem2A8UOQ=="],
+
+    "frida-java-bridge": ["frida-java-bridge@7.0.13", "", {}, "sha512-YSyKjxbxKnSi3KSUy9vciOvTOuq0RRh9dkxzkQVEdfIIZlw20zE8D3Cq9eL2FDqUVj4YKas6Wf09kCjL5zbffg=="],
+
+    "frida-objc-bridge": ["frida-objc-bridge@8.0.6", "", {}, "sha512-FafCVXbh8837VIyYv9OjJFwPv8w3EiJbDpdQbK50316TfY1paK8URiICzEQIboRLgAjtoi9MugXnys2DOZbiUg=="],
 
     "fs-constants": ["fs-constants@1.0.0", "", {}, "sha512-y6OAwoSIf7FyjMIv94u+b5rdheZEjzR63GTyZJm5qh4Bi+2YgwLCcI/fPFZkL5PSixOt6ZNKm+w+Hfp/Bciwow=="],
 

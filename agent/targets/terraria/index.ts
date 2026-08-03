@@ -529,6 +529,14 @@ rpc.exports = {
   cmd(raw: string): string { return trainer.run(raw); },
   set(id: FeatureId, on: boolean): string { return trainer.setFeature(id, !!on); },
   dispose(): void { trainer.dispose(); },
+  __describe(): unknown {
+    return [
+      { name: "cmd", args: [{ name: "raw", type: "string" }], doc: "Run a trainer command (see 'help')" },
+      { name: "set", args: [{ name: "id", type: "string" }, { name: "on", type: "boolean" }], doc: "Toggle a feature by id" },
+      { name: "dispose", doc: "Stop timers, unhook chat, release features" },
+      { name: "__describe", doc: "This descriptor" },
+    ];
+  },
 };
 
 function byteBuf(value: number): NativePointer {

@@ -45,4 +45,10 @@ Il2Cpp.perform(() => {
 
 rpc.exports = {
   toggle(on: boolean) { enabled = !!on; return `enabled=${enabled}`; },
+  __describe(): unknown {
+    return [
+      { name: "toggle", args: [{ name: "on", type: "boolean" }], doc: "Enable/disable judgment correction" },
+      { name: "__describe", doc: "This descriptor" },
+    ];
+  },
 };

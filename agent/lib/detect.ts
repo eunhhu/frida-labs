@@ -3,7 +3,9 @@
 // Each detector is a cheap module-name / export-symbol check, safe to run on
 // any process. `detectAll()` runs them all and returns every engine that
 // matched (a Unity-IL2CPP game will report both "unity" and "il2cpp").
+// Mono detection consumes the single-source matcher in mono/runtime.ts.
 
+import { MONO_MODULE_RE, exportsRoot } from "./mono/runtime.js";
 export interface EngineInfo {
   /** Stable id: "il2cpp" | "unity-mono" | "fna-mono" | "unreal" | "cocos2dx" */
   id: string;
@@ -26,8 +28,7 @@ function detectIl2cpp(): EngineInfo | null {
 }
 
 function detectUnityMono(): EngineInfo | null {
-  const m = Process.enumerateModules().find((x) =>
-    /^mono\.dll$/i.test(x.name) || /mono-2\.0(-bdwgc|-sgen)?\.(dll|so|dylib)$/i.test(x.name));
+  const m = Process.enumerateModules().find((x) => MONO_MODULE_RE.test(x.name) && exportsRoot(x));
   return m ? { id: "unity-mono", label: "Unity (Mono)", module: m } : null;
 }
 
@@ -35,7 +36,7 @@ function detectFnaMono(): EngineInfo | null {
   // FNA "monokickstart": Mono statically linked into the main binary, which
   // exports mono_get_root_domain even though no mono shared library exists.
   const main = Process.enumerateModules()[0];
-  const hasMono = hasExport(main, "mono_get_root_domain");
+  const hasMono = exportsRoot(main);
   const hasSdl = !!Module.findGlobalExportByName("SDL_PollEvent");
   return hasMono && hasSdl ? { id: "fna-mono", label: "FNA (embedded Mono)", module: main } : null;
 }

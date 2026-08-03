@@ -8,7 +8,7 @@ import { AGENT_OUT, compileAgent } from "./compile.js";
 import { evalOnce, startSession } from "./session.js";
 import { libReference, renderLibText } from "./libref.js";
 import { depcheck } from "./depcheck.js";
-import { writeFileSync } from "node:fs";
+import { existsSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { repoRoot } from "./manifest.js";
 import { createInterface } from "node:readline";
@@ -66,8 +66,15 @@ export const commands: Command[] = [
       if (!target) { ctx.err("usage: flab build <target>"); return 1; }
       const bundle = await compileAgent(target);
       const out = typeof flags.out === "string" ? flags.out : AGENT_OUT;
-      writeFileSync(join(repoRoot(), out), bundle);
-      ctx.out(ctx.json ? JSON.stringify({ target, out, bytes: bundle.length }) : `[+] built ${out} (${bundle.length} bytes)`);
+      const outPath = join(repoRoot(), out);
+      // Size-diff logging: the bridge deps (objc/java) grow bundles, so every
+      // build reports the delta against the artifact it overwrites.
+      const prev = existsSync(outPath) ? statSync(outPath).size : null;
+      writeFileSync(outPath, bundle);
+      const diff = prev === null ? "new" : `${bundle.length >= prev ? "+" : "−"}${Math.abs(bundle.length - prev)} B`;
+      ctx.out(ctx.json
+        ? JSON.stringify({ target, out, bytes: bundle.length, prevBytes: prev })
+        : `[+] built ${out} (${bundle.length} bytes, ${diff})`);
       return 0;
     },
   },

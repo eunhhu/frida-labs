@@ -5,7 +5,7 @@ import frida from "frida";
 import { join } from "node:path";
 import { getTarget, repoRoot } from "./manifest.js";
 import { compileEntry, watchEntry } from "./compile.js";
-import { enableSpawnGating, watchLifecycle, type LifecycleEvents } from "./lifecycle.js";
+import { enableChildGating, enableSpawnGating, watchLifecycle, type LifecycleEvents } from "./lifecycle.js";
 
 export interface SessionOptions {
   /** Manifest target name, or a path to an agent entry file. */
@@ -17,6 +17,8 @@ export interface SessionOptions {
   noWatch?: boolean;
   /** Enable Device spawn gating during setup (pairs with onSpawn* events). */
   spawnGating?: boolean;
+  /** Enable Session child gating after attach (pairs with onChild* events). */
+  childGating?: boolean;
 }
 
 export interface SessionEvents extends LifecycleEvents {
@@ -178,6 +180,12 @@ export async function startSession(opts: SessionOptions, ev: SessionEvents): Pro
       pid = session.pid;
     }
 
+    // Session-level child gating (frida 17): queue the target's children and
+    // surface them via Device's childAdded signal. Released on close.
+    if (opts.childGating) {
+      await enableChildGating(session);
+      ev.onLog("[+] child gating enabled");
+    }
     script = await inject();
     if (wantSpawn) await device.resume(pid);
     ev.onLog(`[+] agent live in ${proc} (pid ${pid})`);
@@ -311,6 +319,7 @@ export async function startSession(opts: SessionOptions, ev: SessionEvents): Pro
       await reloadChain;
       await releaseLifecycle();
       try { await script.unload(); } catch { /* */ }
+      if (opts.childGating) { try { await session.disableChildGating(); } catch { /* */ } }
       try { await session.detach(); } catch { /* */ }
     },
   };

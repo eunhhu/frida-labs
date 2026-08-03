@@ -13,6 +13,8 @@
   },
   "dependencies": {
     "frida": "^17.16.4",
+    "frida-java-bridge": "^7.0.13",
+    "frida-objc-bridge": "^8.0.6",
     "ink": "^7.1.1",
     "react": "^19.2.8"
   },

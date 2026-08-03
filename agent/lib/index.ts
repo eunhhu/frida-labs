@@ -1,11 +1,25 @@
 // frida-labs generic library — cross-game debugging utilities.
 // Import in any target: `import { modules, exports, trace, ue } from "../../lib/index.js";`
 //
-// NOTE: the Unity/IL2CPP helpers are intentionally NOT re-exported here — importing
-// this barrel eagerly runs UE reflection discovery, and pulling in the IL2CPP bridge
-// would bloat/break non-Unity targets. Unity targets import "./il2cpp.js" directly.
+// Side-effect invariant: importing this barrel must never touch the target
+// process beyond pure module-eval (the UE namespace still runs reflection
+// discovery at import for historical reasons — only UE targets import `ue`).
+// The Unity/IL2CPP helpers are intentionally NOT re-exported here — pulling
+// in the IL2CPP bridge would bloat/break non-Unity targets; Unity targets
+// import "./il2cpp.js" directly. The objc/java bridges stay behind lazy
+// gates: their modules export pure functions and require() the bridge only on
+// first api() call, so re-exporting them is side-effect free.
 export * as mem from "./mem.js";
 export * as ue from "./ue/index.js";
+export * as stalker from "./stalker.js";
+export * as mam from "./mam.js";
+export * as sym from "./sym.js";
+export * as objc from "./objc.js";
+export * as java from "./java.js";
+export * as excrash from "./excrash.js";
 export { log, ok, warn, err } from "./log.js";
 export { modules, exports, imports, symbols } from "./search.js";
-export { trace, stub, detachAll } from "./hook.js";
+export {
+  trace, stub, detachAll, implementation, replace,
+  withVerification, type Verification, type VerificationStatus,
+} from "./hook.js";

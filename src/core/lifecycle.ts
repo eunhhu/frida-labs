@@ -95,3 +95,16 @@ export function watchLifecycle(device: frida.Device, ev: LifecycleEvents): () =>
 export async function enableSpawnGating(device: frida.Device): Promise<void> {
   await device.enableSpawnGating();
 }
+
+/**
+ * Turn on child gating for an attached Session so the target's forked/spawned
+ * children are queued and reported via Device's childAdded signal instead of
+ * running free. NOTE: in frida 17 this is SESSION-level (not Device-level —
+ * Device has no enableChildGating); pair with watchLifecycle's onChildAdded.
+ * Gating ends with the session; call session.disableChildGating() on teardown
+ * when the session outlives the interest (startSession does this via
+ * releaseLifecycle).
+ */
+export async function enableChildGating(session: frida.Session): Promise<void> {
+  await session.enableChildGating();
+}

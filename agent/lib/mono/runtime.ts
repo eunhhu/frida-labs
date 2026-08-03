@@ -31,7 +31,7 @@ export const MONO_MODULE_RE =
 
 const ROOT_EXPORT = "mono_get_root_domain";
 
-function exportsRoot(mod: Module): boolean {
+export function exportsRoot(mod: Module): boolean {
   try {
     return mod.findExportByName(ROOT_EXPORT) !== null;
   } catch {

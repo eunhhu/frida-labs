@@ -36,6 +36,24 @@ rpc.exports = {
   moveFly(on: boolean) { return ue.movement.fly(!!on); },
   moveEnforce(on: boolean, ms?: number) { return ue.movement.enforce(!!on, ms); },
   moveReset() { return ue.movement.reset(); },
+
+  __describe(): unknown {
+    return [
+      { name: "info", doc: "UE object array / module facts" },
+      { name: "classes", args: [{ name: "pkg", type: "string?" }], doc: "Classes in a UE package" },
+      { name: "espSnapshot", args: [{ name: "w", type: "number?" }, { name: "h", type: "number?" }], doc: "One-shot ESP data snapshot" },
+      { name: "espInstall", doc: "Install ESP overlay" },
+      { name: "espRemove", doc: "Remove ESP overlay" },
+      { name: "espTest", args: [{ name: "on", type: "boolean" }], doc: "Draw a test box at screen center" },
+      { name: "espStatus" },
+      { name: "moveRead" },
+      { name: "moveApply", args: [{ name: "opts", type: "object" }] },
+      { name: "moveFly", args: [{ name: "on", type: "boolean" }] },
+      { name: "moveEnforce", args: [{ name: "on", type: "boolean" }, { name: "ms", type: "number?" }] },
+      { name: "moveReset" },
+      { name: "__describe", doc: "This descriptor" },
+    ];
+  },
 };
 
 ok(`mecchachameleon agent ready — ${ue.OA.num} objects @ ${ue.gameModule.name}`);

@@ -38,6 +38,19 @@ rpc.exports = {
   trace(className: string, method: string, ns = "") {
     return mono.trace(mono.method(ns, className, method)) ? `tracing ${className}.${method}` : "method not found";
   },
+
+  __describe(): unknown {
+    return [
+      { name: "info", doc: "Assembly/image/class counts" },
+      { name: "assemblies", doc: "Loaded assembly image names" },
+      { name: "classes", args: [{ name: "pattern", type: "string?" }], doc: "Assembly-CSharp classes (regex filter)" },
+      { name: "methods", args: [{ name: "className", type: "string" }, { name: "ns", type: "string?" }] },
+      { name: "fields", args: [{ name: "className", type: "string" }, { name: "ns", type: "string?" }] },
+      { name: "address", args: [{ name: "className", type: "string" }, { name: "method", type: "string" }, { name: "ns", type: "string?" }] },
+      { name: "trace", args: [{ name: "className", type: "string" }, { name: "method", type: "string" }, { name: "ns", type: "string?" }] },
+      { name: "__describe", doc: "This descriptor" },
+    ];
+  },
 };
 
 ok(`adofai (mono) ready — ${mono.assemblies().length} assemblies`);
