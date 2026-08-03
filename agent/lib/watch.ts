@@ -35,8 +35,11 @@ const RW: Record<WatchType, { read: Reader; write: Writer }> = {
   pointer: { read: (p) => p.readPointer().toString(), write: (p, v) => p.writePointer(ptr(v)) },
 };
 
+// pointer width resolved lazily — Process.* at module scope would break the
+// lib import-time side-effect invariant (barrel import-safety).
 const SIZE: Record<WatchType, number> = {
-  u8: 1, u16: 2, u32: 4, u64: 8, s32: 4, float: 4, double: 8, pointer: Process.pointerSize,
+  u8: 1, u16: 2, u32: 4, u64: 8, s32: 4, float: 4, double: 8,
+  get pointer() { return Process.pointerSize; },
 };
 
 /** Read once, typed. */
