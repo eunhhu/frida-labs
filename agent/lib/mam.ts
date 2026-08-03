@@ -2,8 +2,9 @@
 // Side-effect free at import; monitoring starts only via enable().
 //
 // Platform caveats (documented failure modes, call sites should surface them):
-//  - enable() THROWS when a range is not page-aligned or the platform/backend
-//    cannot guard it — enableVerified() captures that as state "failed".
+//  - MemoryAccessMonitor.enable() THROWS for misaligned/unguardable ranges;
+//    our enable() never rethrows — failures land in verification state
+//    "failed" (see enable()).
 //  - Platform finding (darwin 26.5.2 arm64, SIP on): enable() SUCCEEDS but
 //    access callbacks are never delivered — silent non-delivery, exactly the
 //    failure class firing-verification exists for. On this host a demo

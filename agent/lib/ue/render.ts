@@ -4,7 +4,7 @@
 // runtime. Reusable for any UE5 game with a Canvas HUD.
 
 import { rP, rF } from "../mem.js";
-import { OA, objAt, classNameOf, nameOf, isA, propOff, inModule, findClass, findFunc, defaultActorVtable } from "./reflection.js";
+import { oa, objAt, classNameOf, nameOf, isA, propOff, inModule, findClass, findFunc, defaultActorVtable } from "./reflection.js";
 
 const HUD_CANVAS = 0x2f8; // AHUD::Canvas (UCanvas*), valid during PostRender
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -13,7 +13,7 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 export async function findProcessEvent(ms = 700): Promise<{ slot: number; addr: NativePointer } | null> {
   const vts: NativePointer[] = [];
   const seen = new Set<string>();
-  for (let i = 0; i < OA.num && vts.length < 250; i += Math.max(1, (OA.num / 2500) | 0)) {
+  for (let i = 0; i < oa().num && vts.length < 250; i += Math.max(1, (oa().num / 2500) | 0)) {
     const o = objAt(i); if (!o) continue;
     const vt = rP(o);
     if (vt && inModule(vt) && !seen.has(vt.toString())) { seen.add(vt.toString()); vts.push(vt); }
@@ -70,7 +70,7 @@ export async function findHudRenderSlot(hud: NativePointer, ms = 800): Promise<{
 }
 
 export function liveHud(): NativePointer | null {
-  for (let i = 0; i < OA.num; i++) { const o = objAt(i); if (o && isA(o, "HUD") && !(nameOf(o) ?? "").startsWith("Default__")) return o; }
+  for (let i = 0; i < oa().num; i++) { const o = objAt(i); if (o && isA(o, "HUD") && !(nameOf(o) ?? "").startsWith("Default__")) return o; }
   return null;
 }
 

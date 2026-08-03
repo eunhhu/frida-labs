@@ -4,7 +4,7 @@
 // (class names, roles, colors) are config constants below.
 
 import * as mem from "../mem.js";
-import { OA, objAt, classOf, classNameOf, childOfType } from "./reflection.js";
+import { oa, objAt, classOf, classNameOf, childOfType } from "./reflection.js";
 import { CTRL_PAWN, C2W_T, ROOT_COMP, viewFromCamera, worldToScreen } from "./actor.js";
 import { UeCanvas } from "./render.js";
 
@@ -25,7 +25,7 @@ interface ClassMap { clsRole: Record<string, Role>; pcCls: string | null; }
 function buildClassMap(): ClassMap {
   const clsRole: Record<string, Role> = {};
   let pcCls: string | null = null;
-  for (let i = 0; i < OA.num; i++) {
+  for (let i = 0; i < oa().num; i++) {
     const o = objAt(i); if (!o) continue;
     const cn = classNameOf(o); if (!cn) continue;
     if (!pcCls && cn === PC_CLASS) { const cp = classOf(o); if (cp) pcCls = cp.toString(); }
@@ -35,7 +35,7 @@ function buildClassMap(): ClassMap {
 }
 
 function scan(map: ClassMap): { enemies: Enemy[]; cam: NativePointer | null } {
-  const EPC = 65536, num = OA.num, OBJ = OA.objects;
+  const EPC = 65536, num = oa().num, OBJ = oa().objects;
   let pc: NativePointer | null = null;
   const enemies: Enemy[] = [];
   for (let ci = 0; ci < Math.ceil(num / EPC); ci++) {

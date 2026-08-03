@@ -30,7 +30,7 @@ function roll(oj: number): number {
   return oj;
 }
 
-Il2Cpp.perform(() => {
+il2cpp.perform(() => {
   ok("IL2CPP bridge loaded");
   const judgeUnit = il2cpp.methods("^JudgeUnit$")[0];
   judgeUnit.implementation = function (this: Il2Cpp.Class | Il2Cpp.Object | Il2Cpp.ValueType, ...args: unknown[]) {

@@ -73,11 +73,16 @@ function findNames(): NativePointer {
   throw new Error("[ue] GNames not found");
 }
 
-export const OA: ObjArray = findObjArray();
-export const GNAMES: NativePointer = findNames();
+let cachedOA: ObjArray | null = null;
+let cachedGnames: NativePointer | null = null;
+
+/** Lazy GUObjectArray — resolved on first call, NEVER at import (lib invariant). */
+export function oa(): ObjArray { return (cachedOA ??= findObjArray()); }
+/** Lazy GNames — resolved on first call, NEVER at import (lib invariant). */
+export function gnames(): NativePointer { return (cachedGnames ??= findNames()); }
 
 export function resolveId(id: number): string | null {
-  const bp = rP(GNAMES.add((id >>> 16) * 8));
+  const bp = rP(gnames().add((id >>> 16) * 8));
   if (!bp) return null;
   const e = bp.add((id & 0xffff) * 2);
   const h = rU16(e);
@@ -95,7 +100,7 @@ export function fname(p: NativePointer): string | null {
 }
 
 export function objAt(i: number): NativePointer | null {
-  const chunk = rP(OA.objects.add((i >>> 16) * 8));
+  const chunk = rP(oa().objects.add((i >>> 16) * 8));
   return chunk ? rP(chunk.add((i & 0xffff) * 24)) : null;
 }
 
@@ -136,7 +141,7 @@ export function childOfType(actor: NativePointer, type: string, span = 0x600): N
 }
 
 export function firstInstance(pred: (o: NativePointer) => boolean): NativePointer | null {
-  for (let i = 0; i < OA.num; i++) {
+  for (let i = 0; i < oa().num; i++) {
     const o = objAt(i);
     if (o && !(nameOf(o) ?? "").startsWith("Default__")) { try { if (pred(o)) return o; } catch { /* */ } }
   }
@@ -146,7 +151,7 @@ export function firstInstance(pred: (o: NativePointer) => boolean): NativePointe
 /** Every live instance whose class name matches a regex (skips CDOs). */
 export function instancesOf(re: RegExp): NativePointer[] {
   const out: NativePointer[] = [];
-  for (let i = 0; i < OA.num; i++) {
+  for (let i = 0; i < oa().num; i++) {
     const o = objAt(i);
     if (!o) continue;
     const cn = classNameOf(o);
@@ -156,7 +161,7 @@ export function instancesOf(re: RegExp): NativePointer[] {
 }
 
 export function findClass(name: string): NativePointer | null {
-  for (let i = 0; i < OA.num; i++) { const o = objAt(i); if (o && classNameOf(o) === "Class" && nameOf(o) === name) return o; }
+  for (let i = 0; i < oa().num; i++) { const o = objAt(i); if (o && classNameOf(o) === "Class" && nameOf(o) === name) return o; }
   return null;
 }
 
@@ -167,14 +172,14 @@ export function findFunc(cls: NativePointer, name: string): NativePointer | null
 }
 
 export function defaultActorVtable(): NativePointer | null {
-  for (let i = 0; i < OA.num; i++) { const o = objAt(i); if (o && nameOf(o) === "Default__Actor") return rP(o); }
+  for (let i = 0; i < oa().num; i++) { const o = objAt(i); if (o && nameOf(o) === "Default__Actor") return rP(o); }
   return null;
 }
 
 /** List the classes owned by a /Script or /Game package, e.g. classesInPackage("/Script/PenguinHotel"). */
 export function classesInPackage(pkg: string): string[] {
   const out: string[] = [];
-  for (let i = 0; i < OA.num; i++) {
+  for (let i = 0; i < oa().num; i++) {
     const o = objAt(i);
     if (o && classNameOf(o) === "Class" && nameOf(pkgOf(o)) === pkg) { const n = nameOf(o); if (n) out.push(n); }
   }

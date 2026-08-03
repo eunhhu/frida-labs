@@ -4,7 +4,8 @@
 //
 // Everything here is game-specific glue; the heavy lifting lives in ../../lib.
 
-import { ok, ue } from "../../lib/index.js";
+import { ok } from "../../lib/log.js";
+import * as ue from "../../lib/ue/index.js";
 
 const esp = new ue.Esp();
 
@@ -14,9 +15,9 @@ rpc.exports = {
     return {
       module: ue.gameModule.name,
       base: ue.gameModule.base.toString(),
-      objects: ue.OA.num,
-      gobjects: ue.OA.objects.toString(),
-      gnames: ue.GNAMES.toString(),
+      objects: ue.oa().num,
+      gobjects: ue.oa().objects.toString(),
+      gnames: ue.gnames().toString(),
     };
   },
   classes(pkg = "/Script/PenguinHotel") {
@@ -56,4 +57,4 @@ rpc.exports = {
   },
 };
 
-ok(`mecchachameleon agent ready — ${ue.OA.num} objects @ ${ue.gameModule.name}`);
+ok(`mecchachameleon agent ready — ${ue.oa().num} objects @ ${ue.gameModule.name}`);

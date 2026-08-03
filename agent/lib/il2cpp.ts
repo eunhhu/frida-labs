@@ -6,6 +6,15 @@ import "frida-il2cpp-bridge";
 import { ok } from "./log.js";
 import { withVerification, type Verification } from "./hook.js";
 
+/**
+ * Lib-owned Il2Cpp.perform wrapper (Phase B plan obligation: targets call the
+ * lib surface, not the ambient bridge global). The bridge schedules `fn` on
+ * the IL2CPP main thread; the returned Promise resolves with fn's result.
+ */
+export function perform<T>(fn: () => T | Promise<T>): Promise<T> {
+  return Il2Cpp.perform(fn);
+}
+
 export function classes(q: string, assembly = "Assembly-CSharp"): Il2Cpp.Class[] {
   const image = Il2Cpp.domain.assembly(assembly).image;
   const results = image.classes.filter((c) => new RegExp(q, "i").test(c.fullName));

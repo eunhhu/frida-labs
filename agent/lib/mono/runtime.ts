@@ -27,7 +27,7 @@ export const BAKED_MODULES: Record<string, readonly string[]> = {
 
 // Conventional standalone Mono runtime module names (tier 2).
 export const MONO_MODULE_RE =
-  /^(?:mono\.dll|mono-2\.0-(?:bdwgc|sgen)(?:\.0)?\.(?:dll|dylib|so)|libmono-2\.0-(?:bdwgc|sgen)(?:\.0)?\.(?:dll|dylib|so)|libmonobdwgc-2\.0(?:\.0)?\.(?:dll|dylib|so)|mono(?:-2\.0)?\.so)$/i;
+  /^(?:mono\.dll|libmono\.0\.dylib|(?:lib)?mono(?:-2\.0)?(?:\.0)?\.(?:dll|dylib|so)(?:\.\d+)?|(?:lib)?mono-2\.0-(?:bdwgc|sgen)(?:\.0)?\.(?:dll|dylib|so)(?:\.\d+)?|libmono(?:bdwgc|sgen)-2\.0(?:\.0)?\.(?:dll|dylib|so)(?:\.\d+)?)$/i;
 
 const ROOT_EXPORT = "mono_get_root_domain";
 

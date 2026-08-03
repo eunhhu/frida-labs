@@ -39,13 +39,15 @@ let dispatcherArmed = false;
 
 function armDispatcher(): void {
   if (dispatcherArmed) return;
-  dispatcherArmed = true;
+  // Flag set only AFTER the handler is live — a throwing registration must
+  // not leave the dispatcher marked armed but dead.
   Process.setExceptionHandler((exc) => {
     for (const h of handlers) {
       try { if (h.fn(exc)) return true; } catch { /* a broken handler must not kill the chain */ }
     }
     return false;
   });
+  dispatcherArmed = true;
 }
 
 /**
