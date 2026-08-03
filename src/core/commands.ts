@@ -166,25 +166,16 @@ export const commands: Command[] = [
   {
     name: "depcheck",
     usage: "flab depcheck [--json]",
-    summary: "Fail when any target imports outside agent/lib (allowlist pinned per file:line).",
-    detail: [
-      "Targets must depend only on agent/lib. Violations exit 1.",
-      "Phase-A allowlist (removed in Phase B): terraria ./mono.js, mecchachameleon ./esp.js, piu frida-il2cpp-bridge.",
-    ].join("\n"),
+    summary: "Fail when any target imports outside agent/lib (zero exceptions).",
+    detail: "Targets must depend only on agent/lib. Violations exit 1.",
     async run(_a, _f, ctx) {
       const r = depcheck();
       if (ctx.json) {
         ctx.out(JSON.stringify(r, null, 2));
       } else {
         ctx.out(`scanned ${r.scanned} import edge(s) across agent/targets`);
-        for (const a of r.allowlisted) {
-          ctx.out(`~ allowlisted${a.drifted ? " (line drifted)" : ""}  ${a.file}:${a.line}  "${a.specifier}"  [slice ${a.slice}]`);
-        }
         for (const v of r.violations) {
           ctx.out(`✗ violation  ${v.file}:${v.line}  "${v.specifier}"  — targets may only import agent/lib`);
-        }
-        for (const s of r.staleAllowlist) {
-          ctx.out(`! stale allowlist entry  ${s.file}:${s.line}  "${s.specifier}"  — edge gone; remove it (slice ${s.slice})`);
         }
       }
       return r.violations.length ? 1 : 0;

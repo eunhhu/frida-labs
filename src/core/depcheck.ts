@@ -1,10 +1,8 @@
 // Dependency-direction checker — enforces "targets depend only on agent/lib".
 // Scans agent/targets/** for import edges; every edge must resolve under
-// agent/lib, unless it is one of the pinned allowlist exceptions being removed
-// in Phase B (mecchachameleon ./esp.js + piu frida-il2cpp-bridge → b2; the
-// terraria ./mono.js pin was removed when b1 consolidated Mono into
-// agent/lib/mono). When Phase B lands, DEP_ALLOWLIST is deleted and the gate
-// becomes zero-exceptions.
+// agent/lib. Zero exceptions: the Phase-A/B pinned allowlist (terraria
+// ./mono.js, mecchachameleon ./esp.js, piu frida-il2cpp-bridge) was fully
+// absorbed in Phase B (b1 mono consolidation, b2 esp/il2cpp moves).
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
@@ -19,33 +17,9 @@ export interface ImportEdge {
   resolved: string | null;
 }
 
-export interface AllowlistEntry {
-  file: string;
-  line: number;
-  specifier: string;
-  /** Plan slice that removes this edge. */
-  slice: string;
-}
-
-/** Pinned exceptions — delete entries as b2 lands; delete the whole constant
- *  when Phase B completes (gate then proves zero exceptions). */
-export const DEP_ALLOWLIST: AllowlistEntry[] = [
-  { file: "agent/targets/mecchachameleon/index.ts", line: 8, specifier: "./esp.js", slice: "b2" },
-  { file: "agent/targets/piu/index.ts", line: 7, specifier: "frida-il2cpp-bridge", slice: "b2" },
-];
-
-export interface AllowlistedEdge extends ImportEdge {
-  slice: string;
-  /** True when the edge moved off the pinned line (matched by file+specifier). */
-  drifted: boolean;
-}
-
 export interface DepcheckReport {
-  /** Edges neither under agent/lib nor allowlisted — gate fails on these. */
+  /** Edges outside agent/lib — the gate fails on any of these. */
   violations: ImportEdge[];
-  allowlisted: AllowlistedEdge[];
-  /** Allowlist entries with no matching edge — the migration already happened. */
-  staleAllowlist: AllowlistEntry[];
   scanned: number;
 }
 
@@ -255,32 +229,9 @@ export function depcheck(root: string = repoRoot()): DepcheckReport {
   const edges = findImportEdges(root);
   const libPrefix = "agent/lib/";
   const violations: ImportEdge[] = [];
-  const allowlisted: AllowlistedEdge[] = [];
-  const matched = new Set<AllowlistEntry>();
-
   for (const e of edges) {
     if (e.resolved && (e.resolved === "agent/lib" || e.resolved.startsWith(libPrefix))) continue;
-    // Not under agent/lib — violation unless pinned in the allowlist.
-    const exact = DEP_ALLOWLIST.find((a) => a.file === e.file && a.line === e.line && a.specifier === e.specifier);
-    if (exact) {
-      allowlisted.push({ ...e, slice: exact.slice, drifted: false });
-      matched.add(exact);
-      continue;
-    }
-    // Line-drift fallback: same file + specifier, moved line.
-    const drift = DEP_ALLOWLIST.find((a) => a.file === e.file && a.specifier === e.specifier);
-    if (drift) {
-      allowlisted.push({ ...e, slice: drift.slice, drifted: true });
-      matched.add(drift);
-      continue;
-    }
     violations.push(e);
   }
-
-  return {
-    violations,
-    allowlisted,
-    staleAllowlist: DEP_ALLOWLIST.filter((a) => !matched.has(a)),
-    scanned: edges.length,
-  };
+  return { violations, scanned: edges.length };
 }

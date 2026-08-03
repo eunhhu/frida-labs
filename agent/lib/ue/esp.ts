@@ -1,15 +1,14 @@
-// MECCHA CHAMELEON (PenguinHotel) — game-specific ESP.
-// Everything generic (reflection, Canvas drawing, world->screen) comes from
-// ../../lib/ue; only the class names, roles and draw style live here.
+// MECCHA CHAMELEON (PenguinHotel) — ESP overlay built on the generic UE
+// toolkit. Lives in lib so targets depend only on agent/lib; the target's
+// index.ts drives it via rpc (espInstall/espSnapshot/…). Game-specific bits
+// (class names, roles, colors) are config constants below.
 
-import { mem, ue } from "../../lib/index.js";
+import * as mem from "../mem.js";
+import { OA, objAt, classOf, classNameOf, childOfType } from "./reflection.js";
+import { CTRL_PAWN, C2W_T, ROOT_COMP, viewFromCamera, worldToScreen } from "./actor.js";
+import { UeCanvas } from "./render.js";
 
 const { rP, rD } = mem;
-const {
-  OA, objAt, classOf, classNameOf, childOfType,
-  CTRL_PAWN, C2W_T, ROOT_COMP, viewFromCamera, worldToScreen,
-  UeCanvas,
-} = ue;
 
 const ENEMY_RE = /Hunter|Survivor|BigPen|AI_Base/;
 const PC_CLASS = "BP_PlayerController_cLeon_C";

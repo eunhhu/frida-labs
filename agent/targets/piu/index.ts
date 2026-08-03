@@ -4,7 +4,8 @@
 // Demonstrates the IL2CPP side of the lib. Rebalances hit judgments toward
 // PERFECT with a weighted table.
 
-import "frida-il2cpp-bridge";
+// The bridge itself is loaded by ../../lib/il2cpp.js (single import site, so
+// targets never touch node_modules directly — enforced by depcheck).
 import { ok } from "../../lib/log.js";
 import * as il2cpp from "../../lib/il2cpp.js";
 

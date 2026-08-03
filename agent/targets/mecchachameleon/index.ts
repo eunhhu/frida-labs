@@ -5,9 +5,8 @@
 // Everything here is game-specific glue; the heavy lifting lives in ../../lib.
 
 import { ok, ue } from "../../lib/index.js";
-import { Esp } from "./esp.js";
 
-const esp = new Esp();
+const esp = new ue.Esp();
 
 // rpc.exports — callable from the host client as `await api.<name>(...)`.
 rpc.exports = {
