@@ -1,0 +1,7 @@
+Phase A gate terminal capture
+typecheck: PASS
+depcheck: 19 edges, 3 pins, violations 0, rc 0
+targets/doctor/lib: PASS
+stale grep: 0
+builds x4: PASS
+commit: 8e55158

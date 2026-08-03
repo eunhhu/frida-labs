@@ -1,0 +1,85 @@
+{
+  "overall": "PASSED",
+  "contractVerdict": "CLEAN",
+  "matrix": [
+    {
+      "id": "QA2-1",
+      "case": "JSON purity",
+      "verdict": "PASSED",
+      "evidence": "stdout is one parseable JSON document; compile/attach/agent/live logs are stderr-only and unique",
+      "artifactRefs": [
+        "/tmp/flab-qa2/json-purity-receipt.json"
+      ]
+    },
+    {
+      "id": "QA2-2",
+      "case": "probe=run equivalence",
+      "verdict": "PASSED",
+      "evidence": "probe and run both exit 0 on sleeper PID 80791 and return identical {\"result\":[]} for await engines()",
+      "artifactRefs": [
+        "/tmp/flab-qa2/probe-run-equivalence-receipt.json"
+      ]
+    },
+    {
+      "id": "QA2-3",
+      "case": "depcheck adversarial scanner",
+      "verdict": "PASSED",
+      "evidence": "exactly require/import-equals/dynamic-import lines 3/4/5 are violations; comment/string phantoms are absent",
+      "artifactRefs": [
+        "/tmp/flab-qa2/depcheck-receipt.json"
+      ]
+    },
+    {
+      "id": "QA2-4",
+      "case": "flab new positional process",
+      "verdict": "PASSED",
+      "evidence": "scaffold and manifest use Gate Proc.exe; target removed and manifest restored byte-identically",
+      "artifactRefs": [
+        "/tmp/flab-qa2/new-positional-receipt.json"
+      ]
+    },
+    {
+      "id": "QA2-5",
+      "case": "describe semantics",
+      "verdict": "PASSED",
+      "evidence": "describe is [] before call and [{name: engines}] after; rpcNames grows [] -> [engines]",
+      "artifactRefs": [
+        "/tmp/flab-qa2/describe-receipt.json"
+      ]
+    },
+    {
+      "id": "QA2-6",
+      "case": "startSession failure cleanup",
+      "verdict": "PASSED",
+      "evidence": "nonexistent attach propagates Process not found with no unhandled rejection and exit 0 from harness",
+      "artifactRefs": [
+        "/tmp/flab-qa2/failure-cleanup-receipt.json"
+      ]
+    },
+    {
+      "id": "QA2-7",
+      "case": "agent log routing",
+      "verdict": "PASSED",
+      "evidence": "_probe agent line occurs exactly once on stderr and zero times on stdout",
+      "artifactRefs": [
+        "/tmp/flab-qa2/log-handler-routing-receipt.json"
+      ]
+    }
+  ],
+  "cleanup": {
+    "verdict": "PASSED",
+    "artifactRefs": [
+      "/tmp/flab-qa2/cleanup-receipt.json"
+    ]
+  },
+  "artifactRefs": [
+    "/tmp/flab-qa2/json-purity-receipt.json",
+    "/tmp/flab-qa2/probe-run-equivalence-receipt.json",
+    "/tmp/flab-qa2/depcheck-receipt.json",
+    "/tmp/flab-qa2/new-positional-receipt.json",
+    "/tmp/flab-qa2/describe-receipt.json",
+    "/tmp/flab-qa2/failure-cleanup-receipt.json",
+    "/tmp/flab-qa2/log-handler-routing-receipt.json",
+    "/tmp/flab-qa2/cleanup-receipt.json"
+  ]
+}
