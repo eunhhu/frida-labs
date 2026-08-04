@@ -1,0 +1,24 @@
+^DOK   lib/cocos.ts
+OK   lib/detect.ts
+OK   lib/excrash.ts
+OK   lib/hook.ts
+OK   lib/index.ts
+OK   lib/java.ts
+OK   lib/log.ts
+OK   lib/mam.ts
+OK   lib/mem.ts
+OK   lib/objc.ts
+OK   lib/search.ts
+OK   lib/stalker.ts
+OK   lib/strings.ts
+OK   lib/sym.ts
+OK   lib/watch.ts
+OK   lib/mono/index.ts
+OK   lib/mono/runtime.ts
+OK   lib/ue/actor.ts
+OK   lib/ue/esp.ts
+OK   lib/ue/index.ts
+OK   lib/ue/movement.ts
+OK   lib/ue/reflection.ts
+OK   lib/ue/render.ts
+sweep: 23/23 import-safe

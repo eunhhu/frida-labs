@@ -1,0 +1,11 @@
+^DTSC-OK
+build terraria OK
+build adofai OK
+build piu OK
+build mecchachameleon OK
+[33m501406c[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m Phase B cleaner fixes: BAKED_MODULES consumed, symbolication shared, stale comments
+[33m1b70a24[m Phase B gen-3 delta fix: lazy pointerSize in watch.ts SIZE table
+[33mc5bde5f[m Phase B gen-2 delta fix: lazy gameModule, accurate il2cpp comment
+[33md45a811[m Phase B review-round fixes: lazy UE init, matcher coverage, lib perform
+[33mf6227ae[m b4: exception-handler ownership — shared dispatcher in excrash.ts
+[33m6f2560b[m b3: frida advanced modules + firing-verified hook core

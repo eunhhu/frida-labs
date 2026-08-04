@@ -1,0 +1,14 @@
+^D[0m[31mcompiling agent/targets/_probe/index.ts …[0m
+[0m[31mspawning /tmp/flab-sleeper …[0m
+[0m[31m[agent] [+] _probe: no known engine detected — native-only surface[0m
+[0m[31m[+] agent live in /tmp/flab-sleeper (pid 1107)[0m
+[0m[31m[agent] [+] implementation 0x183556178 (js replacement)[0m
+[0m[31m[agent] [+] stalker following tid=259 events={"call":true,"block":true} excluded=46 range(s)[0m
+[0m[31m[agent] [+] stalker stopped tid=259[0m
+[0m[31m[agent] [stalker] tid=259 total=32768 bare=32768[0m
+[0m[31m[agent] [+] mam watching 1 range(s)[0m
+[0m[31m[agent] [+] mam disabled[0m
+[0m[31m[agent] [+] objc bridge loaded[0m
+[0m[31m[agent] [+] excrash handler installed (report-only; faults still propagate)[0m
+[0m[31m[agent] [+] excrash handler removed[0m
+{"result":{"hook":{"fired":1,"verified":true},"replace":{"fired":1,"fake":"getpid() -> 4242"},"stalker":{"total":32768,"verified":true,"state":"verified"},"mam":{"fired":0,"verified":false},"sym":{"matches":0,"sample":"0x1835618b0"},"objc":{"platform":"darwin","available":true,"classCount":84},"java":{"platform":"darwin","available":false},"excrash":{"installed":true,"reports":0},"describe":22}}

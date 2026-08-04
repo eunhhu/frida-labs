@@ -1,0 +1,28 @@
+{
+ "cohort": "phase-b",
+ "head": "501406c",
+ "lanes": {
+  "architect": {
+   "generations": 4,
+   "final": "18-PhBArchGen4 CLEAR/CLEAR/CLEAR APPROVE"
+  },
+  "cleaner": {
+   "generations": 2,
+   "final": "20-PhBCleanerGen2 CLEAN; kept-set 7 public API exports ACCEPTABLE"
+  },
+  "qa": {
+   "generations": 2,
+   "final": "21-PhBQaGen2 PASSED 5/5"
+  }
+ },
+ "receipts": [
+  "14-PhBQa",
+  "15-PhBArchitect",
+  "16-PhBArchGen2",
+  "17-PhBArchGen3",
+  "18-PhBArchGen4",
+  "19-PhBCleaner",
+  "20-PhBCleanerGen2",
+  "21-PhBQaGen2"
+ ]
+}
