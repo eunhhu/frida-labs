@@ -69,7 +69,7 @@ const base = {
     return `tracing ${addr}`;
   },
   // --- 8 advanced-module demos (firing-verified; see appendix A of the plan) ---
-  /** Stalker: capture basic-block events on the main thread for `ms`. */
+  /** Stalker: capture events on the first enumerated thread for `ms`. */
   async demoStalker(ms?: number): Promise<{ total: number; verified: boolean; state: string }> {
     const tid = Process.enumerateThreads()[0]!.id;
     const s = await stalker.sample(ms ?? 300, tid, { events: { block: true } });
@@ -183,7 +183,7 @@ if (engines.some((e) => e.id === "cocos2dx")) {
 }
 
 if (engines.some((e) => e.id === "unreal")) {
-  warn("_probe: UE game — lib/ue reflection runs eagerly on import, so it is not loaded here; write a real target importing ../../lib/ue");
+  warn("_probe: UE game — lib/ue is lazy since Phase B but its queries are game-specific, so it is not exercised here; write a real target importing ../../lib/ue");
 }
 
 rpc.exports = { ...base, ...extra };

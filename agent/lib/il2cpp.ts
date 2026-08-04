@@ -1,6 +1,7 @@
-// IL2CPP (Unity) helpers. Target-agnostic across Unity games. Call inside
-// Il2Cpp.perform(). Importing this module brings in the IL2CPP bridge, so only
-// Unity targets should import it (never the shared lib barrel).
+// IL2CPP (Unity) helpers. Target-agnostic across Unity games. Targets must
+// schedule work through the lib-owned perform() wrapper below (never the
+// ambient Il2Cpp global). Importing this module brings in the IL2CPP bridge,
+// so only Unity targets should import it (never the shared lib barrel).
 
 import "frida-il2cpp-bridge";
 import { ok } from "./log.js";

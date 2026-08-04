@@ -29,6 +29,8 @@ type Ptr = NativePointer;
 export interface MonoOptions {
   /** Baked/explicit module name(s) tried before candidate names and the export scan. */
   moduleName?: string | readonly string[];
+  /** Known target key — consults BAKED_MODULES[target] when moduleName is absent. */
+  target?: string;
   /** Default image (assembly) used by image()/classByName()/klass(). */
   imageName?: string;
 }
@@ -158,7 +160,8 @@ export function createMono(opts: MonoOptions = {}) {
 
   function init(): Api {
     if (api) return api;
-    const { module: mod } = resolveMonoModule(opts.moduleName);
+    const preferred = opts.moduleName ?? (opts.target ? BAKED_MODULES[opts.target] : undefined);
+    const { module: mod } = resolveMonoModule(preferred);
     const P = (n: string, ret: string, args: string[]): never =>
       new NativeFunction(mod.getExportByName(n), ret as NativeFunctionReturnType, args as NativeFunctionArgumentType[]) as never;
     api = {

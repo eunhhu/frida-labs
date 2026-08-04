@@ -9,7 +9,7 @@ type ObjCRuntime = typeof import("frida-objc-bridge").default;
 
 let cached: ObjCRuntime | null = null;
 
-/** True on Darwin with an ObjC runtime present (always true on Apple platforms). */
+/** True on Darwin with a working ObjC bridge/runtime (expected on Apple platforms; false when bridge init fails). */
 export function available(): boolean {
   if (Process.platform !== "darwin") return false;
   try {

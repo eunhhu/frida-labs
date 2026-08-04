@@ -24,7 +24,7 @@ rpc.exports = {
   ping(): string {
     return \`alive; engines: \${engines.map((e) => e.id).join(", ") || "none"}\`;
   },
-  /** Structured rpc surface — consumed by the host describe()/TUI explorer. */
+  /** Structured rpc surface — consumed by the host describe() (TUI explorer lands in Phase C). */
   __describe(): unknown {
     return [
       { name: "ping", doc: "Sanity check — what the agent sees" },

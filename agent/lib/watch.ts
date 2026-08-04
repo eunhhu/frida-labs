@@ -14,6 +14,7 @@
 // else pass through to the remaining handlers and finally the OS.
 
 import { addExceptionHandler } from "./excrash.js";
+import { symbolicate } from "./sym.js";
 import { ok, warn } from "./log.js";
 
 export type WatchType = "u8" | "u16" | "u32" | "u64" | "s32" | "float" | "double" | "pointer";
@@ -77,8 +78,7 @@ function installExceptionHandler(): void {
       const lo = w.addr, hi = w.addr.add(w.size);
       if (hitAddr.compare(lo) >= 0 && hitAddr.compare(hi) < 0) {
         const v = RW[w.type].read(w.addr);
-        const bt = Thread.backtrace(exc.context, Backtracer.ACCURATE)
-          .slice(0, 6).map((a) => DebugSymbol.fromAddress(a).toString()).join("\n    ");
+        const bt = symbolicate(Thread.backtrace(exc.context, Backtracer.ACCURATE).slice(0, 6)).join("\n    ");
         ok(`[watch] ${w.addr} <- ${v}\n    ${bt}`);
         return true; // swallowed — re-arm happens implicitly since DR regs persist
       }

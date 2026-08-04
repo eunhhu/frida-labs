@@ -1,8 +1,8 @@
 // Generic Unreal Engine 5 reflection engine — reusable for ANY UE5 game.
 // Auto-discovers GUObjectArray + GNames from memory signatures (addresses move
 // every launch) and exposes name/class/property resolution over the live
-// UObject graph. Field offsets below are the stable UE5 layout; override via
-// setOffsets() if a particular build differs.
+// UObject graph. Field offsets below are the stable UE5 layout; mutate the
+// exported `O` table if a particular build differs.
 
 import { rP, rU16, rU32, mainModule, moduleByPattern } from "../mem.js";
 

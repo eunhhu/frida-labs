@@ -8,6 +8,7 @@
 // failed:true — it may just mean the trigger path never ran.
 
 import { log, ok } from "./log.js";
+import { symbolicate } from "./sym.js";
 
 export type VerificationState = "verified" | "unverified" | "failed";
 
@@ -93,7 +94,7 @@ export function trace(target: NativePointer, opts: TraceOptions = {}): Invocatio
       const dumped = opts.args ? Array.from({ length: opts.args }, (_, i) => `${i}=${args[i]}`).join(" ") : "";
       log(`[trace] -> ${label} ${dumped}`);
       if (opts.backtrace) {
-        log(Thread.backtrace(this.context, Backtracer.ACCURATE).map(DebugSymbol.fromAddress).join("\n"));
+        log(symbolicate(Thread.backtrace(this.context, Backtracer.ACCURATE)).join("\n"));
       }
       opts.onEnter?.(args, this.context);
     },

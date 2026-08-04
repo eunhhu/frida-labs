@@ -50,7 +50,7 @@ interface CommandHost {
 }
 
 function create(host: CommandHost) {
-    const mono = createMono({ moduleName: "Terraria.bin.osx", imageName: "Terraria" });
+    const mono = createMono({ target: "terraria", imageName: "Terraria" });
 
     const Main = mono.klass("Terraria", "Main");
     const Player = mono.klass("Terraria", "Player");

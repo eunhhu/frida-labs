@@ -1,6 +1,6 @@
 // Exception / crash reporting — structured reports from gum exceptions.
-// Side-effect free at import: the exception handler is installed ONLY by an
-// explicit install() call.
+// Side-effect free at import: the shared dispatcher arms on the FIRST
+// addExceptionHandler()/install() call, never at module-eval time.
 //
 // OWNERSHIP (b4 decision, architect-approved direction): this module owns the
 // single process-global Process.setExceptionHandler via a shared dispatcher.

@@ -1,4 +1,5 @@
-// frida-labs generic library — cross-game debugging utilities.
+// frida-labs library — cross-game debugging utilities + the shared UE toolkit
+// (game-specific data stays config-driven in ue/esp.ts).
 // Import in any target: `import { modules, exports, trace, ue } from "../../lib/index.js";`
 //
 // Side-effect invariant: importing this barrel must never touch the target

@@ -1,5 +1,5 @@
 // Stalker — code tracing / coverage, target-agnostic.
-// Side-effect free at import; every entry point is explicit (follow/unfollow).
+// Side-effect free at import; every entry point is explicit (follow/sample + handle.stop).
 //
 // Stalking a busy thread is expensive: by default every module except the
 // main one is excluded (system libraries generate most of the noise), and
@@ -79,7 +79,7 @@ export function follow(tid?: ThreadId, opts: StalkerSessionOptions = {}): Stalke
     try {
       parsed = Stalker.parse(raw, { annotate: false, stringify: true }) as unknown as unknown[][];
     } catch {
-      return; // partial event blob — next flush covers it
+      return; // unparseable blob is dropped; subsequent drains deliver newer events
     }
     for (const ev of parsed) {
       // annotate:false yields BARE events ([location, target], no kind) on
