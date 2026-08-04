@@ -85,6 +85,22 @@ store.toggleFrozen(s1.id);
 if (store.session(s1.id)!.frozen) fail("freeze off");
 console.log("PASS classify 4-level + freeze toggle");
 
+// 9. close-during-attach must not resurrect (architect HIGH finding)
+workbench.attach(ENTRY, PROC);
+const s3 = store.snapshot.sessions[store.snapshot.sessions.length - 1] ?? fail("third session missing");
+await workbench.close(s3.id); // joins the in-flight launch
+await new Promise((r) => setTimeout(r, 500));
+const s3f = store.session(s3.id);
+if (!s3f) fail("closed session vanished unexpectedly");
+if (s3f.status === "live") fail("closed session resurrected as live");
+if (workbench.handle(s3.id)) fail("late handle escaped closure");
+console.log("PASS close-during-attach: no resurrection, no handle leak");
+
+// 10. removeSession frees the cap slot
+store.removeSession(s3.id);
+if (store.session(s3.id)) fail("removeSession did not remove");
+console.log("PASS removeSession frees slot");
+
 await workbench.closeAll();
 console.log("ALL PASS");
 process.exit(0);

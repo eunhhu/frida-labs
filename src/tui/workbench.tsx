@@ -12,6 +12,9 @@ class Workbench {
   private handles = new Map<number, GameSession>();
   /** Serializes attach attempts so a slow compile cannot interleave with a close. */
   private chains = new Map<number, Promise<void>>();
+  /** Ids whose close was requested while a launch was still in flight — the
+   *  late session is torn down instead of being installed (closed->live fix). */
+  private closeRequested = new Set<number>();
 
   handle(id: number | null): GameSession | null {
     return id === null ? null : (this.handles.get(id) ?? null);
@@ -52,6 +55,12 @@ class Workbench {
             },
           },
         );
+        if (this.closeRequested.has(id)) {
+          // Closed while compiling/attaching: tear the late session down
+          // instead of resurrecting the record as live.
+          try { await session.close(); } catch { /* best effort */ }
+          return;
+        }
         this.handles.set(id, session);
         store.patchSession(id, {
           status: "live",
@@ -73,13 +82,22 @@ class Workbench {
   }
 
   async close(id: number): Promise<void> {
-    await this.teardownHandle(id);
-    store.patchSession(id, { status: "closed", detail: "closed" }, true);
+    this.closeRequested.add(id);
+    try {
+      // Join any in-flight launch so its late session is cancelled above
+      // before we declare the record closed.
+      await (this.chains.get(id) ?? Promise.resolve());
+      await this.teardownHandle(id);
+      store.patchSession(id, { status: "closed", detail: "closed" }, true);
+    } finally {
+      this.closeRequested.delete(id);
+    }
   }
 
   async closeAll(): Promise<void> {
-    const ids = [...this.handles.keys()];
-    await Promise.all(ids.map((id) => this.teardownHandle(id)));
+    const ids = new Set<number>([...this.handles.keys(), ...this.chains.keys()]);
+    for (const id of store.snapshot.sessions.map((s) => s.id)) ids.add(id);
+    await Promise.all([...ids].map((id) => this.close(id)));
   }
 
   private async teardownHandle(id: number): Promise<void> {

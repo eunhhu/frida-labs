@@ -54,7 +54,8 @@ function App({ initialTarget, initialProc }: { initialTarget?: string; initialPr
       return;
     }
     if (key.ctrl && ch === "w" && active) {
-      void workbench.close(active.id);
+      const id = active.id;
+      void workbench.close(id).then(() => store.removeSession(id));
       return;
     }
     if (key.tab) {
@@ -63,10 +64,10 @@ function App({ initialTarget, initialProc }: { initialTarget?: string; initialPr
       return;
     }
     if (key.escape && focus === "panel") { setFocus(state.sessions.length ? "sessions" : "targets"); return; }
-    if (focus === "panel") return; // panel's own useInput (isActive) handles the rest
-
     if (key.ctrl && ch === "t") { setFocus("targets"); return; }
     if (key.ctrl && ch === "s") { setFocus("sessions"); return; }
+    if (focus === "panel") return; // panel's own useInput (isActive) handles the rest
+
     if (key.leftArrow) { setFocus("targets"); return; }
     if (key.rightArrow && state.sessions.length) { setFocus("sessions"); return; }
 
