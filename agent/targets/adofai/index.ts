@@ -23,20 +23,20 @@ rpc.exports = {
     return names.filter((n) => re.test(n));
   },
 
-  methods(className: string, ns = "") {
-    return mono.methods(mono.classByName(ns, className)).map((m) => m.full);
+  methods(className: string, ns?: string | null) {
+    return mono.methods(mono.classByName(ns ?? "", className)).map((m) => m.full);
   },
-  fields(className: string, ns = "") {
-    return mono.fields(mono.classByName(ns, className)).map((f) => `+0x${f.offset.toString(16)} ${f.name}`);
+  fields(className: string, ns?: string | null) {
+    return mono.fields(mono.classByName(ns ?? "", className)).map((f) => `+0x${f.offset.toString(16)} ${f.name}`);
   },
 
   /** Native (JIT) address of a managed method — feed to disassemble/decompile. */
-  address(className: string, method: string, ns = "") {
-    return mono.addressOf(mono.method(ns, className, method))?.toString() ?? null;
+  address(className: string, method: string, ns?: string | null) {
+    return mono.addressOf(mono.method(ns ?? "", className, method))?.toString() ?? null;
   },
   /** Log every call to a managed method. */
-  trace(className: string, method: string, ns = "") {
-    return mono.trace(mono.method(ns, className, method)) ? `tracing ${className}.${method}` : "method not found";
+  trace(className: string, method: string, ns?: string | null) {
+    return mono.trace(mono.method(ns ?? "", className, method)) ? `tracing ${className}.${method}` : "method not found";
   },
 
   __describe(): unknown {

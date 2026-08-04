@@ -18,11 +18,12 @@
 // Baked per-target module names, keyed by target name. Entries are added ONLY
 // from real enumeration evidence on the live game (flab run … --eval), never
 // from guesses. terraria: FNA monokickstart statically links Mono into the
-// main binary (verified live). adofai: pending — baking deferred until the
-// game process is attachable on this host (AMFI task_for_pid policy), so
-// adofai currently resolves via tiers 2–3.
+// main binary (verified live). adofai: Unity Mono (bdwgc) ships the runtime
+// as Contents/Frameworks/libmonobdwgc-2.0.dylib — verified live on the
+// re-signed debug copy (attach + 158 assemblies + trace firing).
 export const BAKED_MODULES: Record<string, readonly string[]> = {
   terraria: ["Terraria.bin.osx"],
+  adofai: ["libmonobdwgc-2.0.dylib"],
 };
 
 // Conventional standalone Mono runtime module names (tier 2).
