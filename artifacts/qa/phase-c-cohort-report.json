@@ -1,0 +1,20 @@
+{
+  "phase": "C",
+  "head": "2e611fe",
+  "lanes": {
+    "architect": [
+      {"id": "22-PhCArchitect", "gen": 1, "verdict": "failed", "findings": "1 HIGH close/launch race (closed->live resurrection, handle leak, reproduced) + 2 MED (cap exhaustion by closed rows; ^t/^s unreachable from panel)"},
+      {"id": "25-PhCArchGen2", "gen": 2, "verdict": "failed", "findings": "1 MED chains map retains settled entries under churn (probe: rows=0 chains=4)"},
+      {"id": "28-PhCArchGen3", "gen": 3, "verdict": "passed", "findings": "NONE; 4 churn cycles + closeAll mid-launch end chains=0 closeRequested=0 handles=0; harness 11 PASS"}
+    ],
+    "cleaner": [
+      {"id": "24-PhCCleaner", "gen": 1, "verdict": "passed", "findings": "3 MED (chains ineffective, removeSession unwired/cap exhaustion, ^t/^s unreachable); kept-set ACCEPTABLE"},
+      {"id": "26-PhCCleanerGen2", "gen": 2, "verdict": "concerns", "findings": "2 LOW (chains retention, repl macros orphan on row removal)"},
+      {"id": "29-PhCCleanerGen3", "gen": 3, "verdict": "passed", "findings": "NONE; macro drop probe (:m = x -> (no macros)); churn counters 2/2 -> 0/0; active-fallback probe passed"}
+    ],
+    "qa": [
+      {"id": "23-PhCQa", "gen": 1, "verdict": "passed", "findings": "NONE; tsc, greps 0/0, harness, depcheck, builds x4, PTY smoke under documented bun buffering limitation"},
+      {"id": "27-PhCQaGen2", "gen": 2, "verdict": "passed", "findings": "NONE; 5/5 checks at bd614c1 incl. 11-PASS harness with race regressions"}
+    ]
+  }
+}
