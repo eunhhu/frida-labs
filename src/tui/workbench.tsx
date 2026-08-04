@@ -78,6 +78,11 @@ class Workbench {
       }
     });
     this.chains.set(id, next);
+    // Identity-guarded settle cleanup: completed launches must not retain
+    // per-id entries (session churn would grow this map and closeAll's work).
+    void next.finally(() => {
+      if (this.chains.get(id) === next) this.chains.delete(id);
+    });
     return next;
   }
 
@@ -98,6 +103,13 @@ class Workbench {
     const ids = new Set<number>([...this.handles.keys(), ...this.chains.keys()]);
     for (const id of store.snapshot.sessions.map((s) => s.id)) ids.add(id);
     await Promise.all([...ids].map((id) => this.close(id)));
+  }
+
+  /** Drop every per-id remnant after the row leaves the store. */
+  dropSession(id: number): void {
+    this.chains.delete(id);
+    this.closeRequested.delete(id);
+    this.handles.delete(id);
   }
 
   private async teardownHandle(id: number): Promise<void> {

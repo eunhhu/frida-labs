@@ -8,7 +8,7 @@ import { render, Box, Text, useInput, useApp } from "ink";
 import { listTargets } from "../core/index.js";
 import { store, MAX_SESSIONS } from "./store.js";
 import { workbench, Sidebar, StatusHeader } from "./workbench.js";
-import { Repl } from "./repl.js";
+import { Repl, dropReplState } from "./repl.js";
 import { Explorer } from "./explorer.js";
 import { Observe } from "./observe.js";
 
@@ -55,7 +55,11 @@ function App({ initialTarget, initialProc }: { initialTarget?: string; initialPr
     }
     if (key.ctrl && ch === "w" && active) {
       const id = active.id;
-      void workbench.close(id).then(() => store.removeSession(id));
+      void workbench.close(id).then(() => {
+        store.removeSession(id);
+        workbench.dropSession(id);
+        dropReplState(id);
+      });
       return;
     }
     if (key.tab) {

@@ -14,6 +14,11 @@ const PAGE_RENDER = 24;
 /** Per-session macro table (UI-level state, not render state). */
 const macros = new Map<number, Map<string, string>>();
 
+/** Release a removed session's macro table (row removal cleanup path). */
+export function dropReplState(id: number): void {
+  macros.delete(id);
+}
+
 function macroTable(id: number): Map<string, string> {
   let t = macros.get(id);
   if (!t) {
