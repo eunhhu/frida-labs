@@ -1,12 +1,16 @@
-^DPASS attach #1 live pid=null
+^D== Phase C multi-session/flood/classify/freeze/race harness ==
+repo: 49ba7b27abc7cb4f9556ea874aa25a12502c2e30
+target: agent/targets/_probe/index.ts against /tmp/flab-sleeper
+PASS attach #1 live pid=null
 PASS attach #2 live pid=null
 PASS switch active -> #1
 PASS rpc engines() -> []
 PASS describe cached (22 exports)
 PASS reconnect #2 live again
-PASS flood 10000 -> ring=5000 dropped>=5000 tail-newest in 1ms (no per-line notify)
+PASS flood 10000 -> ring=5000 dropped>=5000 tail-newest in 2ms (no per-line notify)
 PASS crash event -> crashes[1]
 PASS classify 4-level + freeze toggle
 PASS close-during-attach: no resurrection, no handle leak
 PASS removeSession frees slot
 ALL PASS
+== harness exit: 0 ==
