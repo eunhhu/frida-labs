@@ -1,0 +1,10 @@
+^DPASS attach #1 live pid=null
+PASS attach #2 live pid=null
+PASS switch active -> #1
+PASS rpc engines() -> []
+PASS describe cached (22 exports)
+PASS reconnect #2 live again
+PASS flood 10000 -> ring=5000 dropped>=5000 tail-newest in 2ms (no per-line notify)
+PASS crash event -> crashes[1]
+PASS classify 4-level + freeze toggle
+ALL PASS
