@@ -121,6 +121,11 @@ export function install(onReport?: (r: CrashReport) => void): ExCrashSession {
     if (reports.length > MAX_REPORTS) reports.shift();
     log(`[excrash] ${report.type} at ${report.pc}`);
     try {
+      // Structured channel for host observers (TUI crash view); the text log
+      // above stays the fallback for frontends that only read log lines.
+      send({ type: "crash", report });
+    } catch { /* no message channel (gum-only context) — log line already emitted */ }
+    try {
       onReport?.(report);
     } catch (e) {
       log(`[excrash] onReport callback threw: ${(e as Error).message}`);

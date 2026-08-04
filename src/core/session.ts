@@ -25,6 +25,10 @@ export interface SessionEvents extends LifecycleEvents {
   onLog(line: string): void;
   onError(line: string): void;
   onClose(reason: string): void;
+  /** Structured agent payloads (`send({type, …})`) before they are flattened
+   *  to log text — frontends that render level/tag/crash views subscribe
+   *  here; plain-text frontends keep using onLog/onError only. */
+  onEvent?(payload: Record<string, unknown>): void;
 }
 
 /** Structured rpc export description, as returned by GameSession.describe(). */
@@ -144,6 +148,7 @@ export async function startSession(opts: SessionOptions, ev: SessionEvents): Pro
   const onMessage = (m: frida.Message): void => {
     if (m.type === frida.MessageType.Send) {
       const p = m.payload as { type?: string; line?: string } | null;
+      if (p && typeof p === "object") ev.onEvent?.(p as Record<string, unknown>);
       ev.onLog(p && p.type === "log" ? `[agent] ${p.line}` : `[send] ${JSON.stringify(p)}`);
     } else if (m.type === frida.MessageType.Error) {
       ev.onError(m.stack ?? m.description ?? "agent error");
