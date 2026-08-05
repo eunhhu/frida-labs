@@ -19,7 +19,7 @@ import { ok, warn } from "./log.js";
 
 export type WatchType = "u8" | "u16" | "u32" | "u64" | "s32" | "float" | "double" | "pointer";
 
-export interface WatchHandle { readonly addr: NativePointer; stop(): void; }
+export interface WatchHandle { readonly addr: NativePointer; fired(): number; stop(): void; }
 export interface FreezeHandle extends WatchHandle { value: number; }
 
 type Reader = (p: NativePointer) => number | string;
@@ -59,11 +59,16 @@ interface ActiveWatch {
   addr: NativePointer;
   size: number;
   type: WatchType;
-  threads: ThreadDetails[];
+  threads: Array<{ thread: ThreadDetails; slot: number }>;
+  hits: number;
 }
 
 const active = new Map<number, ActiveWatch>();
+let nextWatchId = 1;
 let handlerInstalled = false;
+// Frida exposes a numeric hardware-watchpoint slot. Architectures commonly
+// provide fewer than 16; unsupported slots throw and are skipped per thread.
+const MAX_WATCHPOINT_SLOTS = 16;
 
 function installExceptionHandler(): void {
   if (handlerInstalled) return;
@@ -73,43 +78,97 @@ function installExceptionHandler(): void {
   // watchpoint traps are handled before any observer (crash reporting).
   addExceptionHandler("watch", (exc) => {
     const hitAddr = exc.memory?.address;
-    if (!hitAddr) return false; // not a memory fault — let the OS deal with it
-    for (const w of active.values()) {
-      const lo = w.addr, hi = w.addr.add(w.size);
-      if (hitAddr.compare(lo) >= 0 && hitAddr.compare(hi) < 0) {
-        const v = RW[w.type].read(w.addr);
-        const bt = symbolicate(Thread.backtrace(exc.context, Backtracer.ACCURATE).slice(0, 6)).join("\n    ");
-        ok(`[watch] ${w.addr} <- ${v}\n    ${bt}`);
-        return true; // swallowed — re-arm happens implicitly since DR regs persist
+    const currentThread = Process.getCurrentThreadId();
+    const isHardwareTrap = exc.type === "breakpoint" || exc.type === "single-step";
+    const matches: Array<{ id: number; watch: ActiveWatch }> = [];
+    for (const [id, candidate] of active) {
+      if (!candidate.threads.some((armed) => armed.thread.id === currentThread)) continue;
+      if (hitAddr) {
+        const hi = candidate.addr.add(candidate.size);
+        if (hitAddr.compare(candidate.addr) >= 0 && hitAddr.compare(hi) < 0) matches.push({ id, watch: candidate });
+      } else if (isHardwareTrap) {
+        // Darwin/arm64 reports hardware watchpoints as EXC_BREAKPOINT without
+        // ExceptionDetails.memory. Frida's own documented example identifies
+        // these by current thread + breakpoint/single-step type.
+        matches.push({ id, watch: candidate });
       }
     }
-    return false;
+    if (matches.length === 0) return false;
+
+    for (const { id, watch: matched } of matches) {
+      const triggered = matched.threads.filter((armed) => armed.thread.id === currentThread);
+      matched.threads = matched.threads.filter((armed) => armed.thread.id !== currentThread);
+      for (const armed of triggered) {
+        try { armed.thread.unsetHardwareWatchpoint(armed.slot); } catch { /* thread may be exiting */ }
+      }
+      matched.hits++;
+
+      let value: number | string = "<unreadable>";
+      try { value = RW[matched.type].read(matched.addr); } catch { /* page may have gone away */ }
+      let backtrace = "";
+      try { backtrace = symbolicate(Thread.backtrace(exc.context, Backtracer.ACCURATE).slice(0, 6)).join("\n    "); }
+      catch { /* exception contexts do not always support accurate unwind */ }
+      ok(`[watch] ${matched.addr} <- ${value}${backtrace ? `\n    ${backtrace}` : ""}`);
+
+      // Frida's documented pattern disables the watchpoint before swallowing
+      // the trap. Re-arm after this exception returns so continuous watches do
+      // not immediately retrigger the same instruction.
+      setTimeout(() => {
+        if (active.get(id) !== matched) return;
+        for (const armed of triggered) {
+          try {
+            armed.thread.setHardwareWatchpoint(armed.slot, matched.addr, matched.size, "w");
+            matched.threads.push(armed);
+          } catch { /* thread ended or slot became unavailable */ }
+        }
+      }, 0);
+    }
+    return true;
   }, true);
 }
 
 /**
  * Hardware watchpoint: log (with backtrace) every write the game makes to
- * `addr`. Arms slot 0 on every current thread. Call h.stop() to remove.
+ * `addr`. Arms an available slot on every current thread. Call h.stop() to
+ * remove it.
  */
 export function watch(addr: NativePointer, type: WatchType = "u32"): WatchHandle {
   installExceptionHandler();
   const size = SIZE[type];
-  const id = active.size;
-  const threads: ThreadDetails[] = [];
+  const threads: Array<{ thread: ThreadDetails; slot: number }> = [];
   let armed = 0;
   for (const t of Process.enumerateThreads()) {
-    try { t.setHardwareWatchpoint(0, addr, size, "w"); threads.push(t); armed++; } catch { /* unsupported thread */ }
+    const used = new Set<number>();
+    for (const w of active.values()) {
+      for (const a of w.threads) if (a.thread.id === t.id) used.add(a.slot);
+    }
+    for (let slot = 0; slot < MAX_WATCHPOINT_SLOTS; slot++) {
+      if (used.has(slot)) continue;
+      try {
+        t.setHardwareWatchpoint(slot, addr, size, "w");
+        threads.push({ thread: t, slot });
+        armed++;
+        break;
+      } catch { /* slot unsupported or unavailable — try the next one */ }
+    }
   }
-  if (armed === 0) warn("[watch] could not arm any thread — platform may not support hw watchpoints");
-  else ok(`[watch] armed on ${armed} thread(s) @ ${addr} (${type})`);
-  active.set(id, { addr, size, type, threads });
+  if (armed === 0) {
+    const message = "[watch] could not arm any thread — platform may not support hw watchpoints";
+    warn(message);
+    throw new Error(message);
+  }
+  ok(`[watch] armed on ${armed} thread(s) @ ${addr} (${type})`);
+  const id = nextWatchId++;
+  const record: ActiveWatch = { addr, size, type, threads, hits: 0 };
+  active.set(id, record);
   return {
     addr,
+    fired: () => record.hits,
     stop() {
       const w = active.get(id);
       if (!w) return;
       active.delete(id);
-      for (const t of w.threads) { try { t.unsetHardwareWatchpoint(0); } catch { /* gone */ } }
+      for (const a of w.threads) { try { a.thread.unsetHardwareWatchpoint(a.slot); } catch { /* gone */ } }
     },
   };
 }
@@ -117,7 +176,7 @@ export function watch(addr: NativePointer, type: WatchType = "u32"): WatchHandle
 /** Remove every armed watchpoint. */
 export function unwatchAll(): void {
   for (const w of active.values()) {
-    for (const t of w.threads) { try { t.unsetHardwareWatchpoint(0); } catch { /* */ } }
+    for (const a of w.threads) { try { a.thread.unsetHardwareWatchpoint(a.slot); } catch { /* */ } }
   }
   active.clear();
 }
@@ -129,9 +188,12 @@ export function unwatchAll(): void {
  * Works even where watchpoints don't. Call fz.stop() to release.
  */
 export function freeze(addr: NativePointer, value: number, type: WatchType = "u32", ms = 1): FreezeHandle {
-  const timer = setInterval(() => { try { RW[type].write(addr, value); } catch { /* page gone */ } }, ms);
+  let fired = 0;
+  const timer = setInterval(() => {
+    try { RW[type].write(addr, value); fired++; } catch { /* page gone */ }
+  }, ms);
   ok(`[freeze] ${addr} = ${value} (${type}) every ${ms}ms`);
-  return { addr, value, stop() { clearInterval(timer); } };
+  return { addr, value, fired: () => fired, stop() { clearInterval(timer); } };
 }
 
 // --- diff -------------------------------------------------------------------

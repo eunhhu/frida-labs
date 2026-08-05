@@ -4,7 +4,14 @@
 // read through the typed getters. No frida/session objects live here — the
 // workbench owns GameSession handles; the store holds only render state.
 
-import type { RpcDescriptor } from "../core/index.js";
+import type {
+  ActionReceipt,
+  DebugEvent,
+  DebugHistory,
+  ReceiptHistory,
+  RpcDescriptor,
+  DeviceInfo,
+} from "../core/index.js";
 
 export type LogLevel = "ok" | "info" | "warn" | "error";
 
@@ -18,6 +25,7 @@ export interface LogLine {
 
 export type SessionStatus = "connecting" | "live" | "detached" | "closed" | "error";
 
+
 export interface SessionState {
   id: number;
   target: string;
@@ -25,12 +33,21 @@ export interface SessionState {
   proc?: string;
   process: string;
   pid: number | null;
+  /** Selected device while connecting; resolved identity once live. */
+  deviceLabel: string;
+  device: DeviceInfo | null;
   status: SessionStatus;
   /** Last status detail: attach progress, detach reason, or error message. */
   detail: string;
   logs: LogLine[];
   /** Lines evicted from the ring buffer (rendered as a drop marker). */
   dropped: number;
+  /** Retained action receipts from the typed action service. */
+  receipts: readonly ActionReceipt[];
+  droppedReceipts: number;
+  /** Retained structured debug events from the typed action service. */
+  debugEvents: readonly DebugEvent[];
+  droppedDebugEvents: number;
   /** Observe panel freeze: new logs keep collecting but the view pins. */
   frozen: boolean;
   /** Cached describe() result; null until the first successful call. */
@@ -51,7 +68,7 @@ export interface TuiState {
 const MAX_SESSIONS = 8;
 const RING = 5000;
 const HISTORY = 200;
-const FLUSH_MS = 33;
+export const FLUSH_MS = 33;
 
 /** Classify a flattened agent log line into level + bracket tag. */
 export function classify(text: string, isError: boolean): Pick<LogLine, "level" | "tag"> {
@@ -65,17 +82,37 @@ export function classify(text: string, isError: boolean): Pick<LogLine, "level" 
 
 type Listener = () => void;
 
-class TuiStore {
+export interface TuiStoreOptions {
+  now?: () => number;
+  schedule?: (callback: () => void, delayMs: number) => unknown;
+  cancel?: (handle: unknown) => void;
+  /** Test/diagnostic seam for work performed by flush/query processing. */
+  countOperations?: (operations: number) => void;
+}
+
+type PendingEvent = { id: number; payload: Record<string, unknown> };
+
+export class TuiStore {
   private state: TuiState = { sessions: [], activeId: null };
   private listeners = new Set<Listener>();
   private version = 0;
   private nextId = 1;
   private dirty = false;
-  private timer: ReturnType<typeof setTimeout> | null = null;
+  private timer: unknown | null = null;
+  private readonly now: () => number;
+  private readonly schedule: (callback: () => void, delayMs: number) => unknown;
+  private readonly cancel: (handle: unknown) => void;
+  private readonly countOperations: (operations: number) => void;
   /** Log lines queued since the last flush, keyed by session id. */
   private pendingLogs = new Map<number, LogLine[]>();
-  private pendingEvents: Array<{ id: number; payload: Record<string, unknown> }> = [];
+  private pendingEvents: PendingEvent[] = [];
 
+  constructor(options: TuiStoreOptions = {}) {
+    this.now = options.now ?? Date.now;
+    this.schedule = options.schedule ?? ((callback, delayMs) => setTimeout(callback, delayMs));
+    this.cancel = options.cancel ?? ((handle) => clearTimeout(handle as ReturnType<typeof setTimeout>));
+    this.countOperations = options.countOperations ?? (() => {});
+  }
   subscribe = (fn: Listener): (() => void) => {
     this.listeners.add(fn);
     return () => this.listeners.delete(fn);
@@ -99,24 +136,34 @@ class TuiStore {
       this.flush();
       return;
     }
-    if (this.timer) return;
-    this.timer = setTimeout(() => this.flush(), FLUSH_MS);
+    if (this.timer !== null) return;
+    this.timer = this.schedule(this.flush, FLUSH_MS);
   }
 
   /** Apply queued logs/events and notify subscribers at most once. */
   flush = (): void => {
-    if (this.timer) {
-      clearTimeout(this.timer);
+    if (this.timer !== null) {
+      this.cancel(this.timer);
       this.timer = null;
     }
     if (!this.dirty) return;
     this.dirty = false;
 
     if (this.pendingLogs.size || this.pendingEvents.length) {
+      const crashesBySession = new Map<number, unknown[]>();
+      for (const event of this.pendingEvents) {
+        if (event.payload.type !== "crash") continue;
+        const report = event.payload.report ?? event.payload;
+        const crashes = crashesBySession.get(event.id);
+        if (crashes) crashes.push(report);
+        else crashesBySession.set(event.id, [report]);
+      }
+      this.countOperations(this.pendingEvents.length);
+
       const sessions = this.state.sessions.map((s) => {
         const queued = this.pendingLogs.get(s.id);
-        const events = this.pendingEvents.filter((e) => e.id === s.id);
-        if (!queued?.length && !events.length) return s;
+        const crashes = crashesBySession.get(s.id);
+        if (!queued?.length && !crashes?.length) return s;
         let next = s;
         if (queued?.length) {
           const merged = [...s.logs, ...queued];
@@ -127,13 +174,12 @@ class TuiStore {
             dropped: s.dropped + (overflow > 0 ? overflow : 0),
           };
         }
-        for (const e of events) {
-          if (e.payload.type === "crash") {
-            next = { ...next, crashes: [...next.crashes, e.payload.report ?? e.payload].slice(-16) };
-          }
+        if (crashes?.length) {
+          next = { ...next, crashes: [...next.crashes, ...crashes].slice(-16) };
         }
         return next;
       });
+      this.countOperations(this.state.sessions.length);
       this.state = { ...this.state, sessions };
       this.pendingLogs.clear();
       this.pendingEvents = [];
@@ -152,7 +198,7 @@ class TuiStore {
 
   /** Register a session in the picker→connecting transition. Returns its id,
    *  or null when the session cap (8) is reached. */
-  addSession(target: string, proc?: string): SessionState | null {
+  addSession(target: string, proc?: string, deviceLabel = "local"): SessionState | null {
     if (this.state.sessions.length >= MAX_SESSIONS) return null;
     const s: SessionState = {
       id: this.nextId++,
@@ -160,10 +206,16 @@ class TuiStore {
       ...(proc ? { proc } : {}),
       process: "",
       pid: null,
+      deviceLabel,
+      device: null,
       status: "connecting",
       detail: "compiling …",
       logs: [],
       dropped: 0,
+      receipts: [],
+      droppedReceipts: 0,
+      debugEvents: [],
+      droppedDebugEvents: 0,
       frozen: false,
       describe: null,
       crashes: [],
@@ -188,7 +240,7 @@ class TuiStore {
   /** Queue a log line for the next 33ms flush (never throws, never blocks). */
   pushLog(id: number, text: string, isError = false): void {
     const { level, tag } = classify(text, isError);
-    const line: LogLine = { ts: Date.now(), level, tag, text };
+    const line: LogLine = { ts: this.now(), level, tag, text };
     const q = this.pendingLogs.get(id);
     if (q) q.push(line);
     else this.pendingLogs.set(id, [line]);
@@ -213,6 +265,21 @@ class TuiStore {
 
   setDescribe(id: number, describe: RpcDescriptor[]): void {
     this.patch(id, { describe }, true);
+  }
+
+
+  setActionHistory(id: number, history: ReceiptHistory): void {
+    this.patch(id, {
+      receipts: history.receipts,
+      droppedReceipts: history.droppedReceipts,
+    }, true);
+  }
+
+  setDebugHistory(id: number, history: DebugHistory): void {
+    this.patch(id, {
+      debugEvents: history.events,
+      droppedDebugEvents: history.droppedDebugEvents,
+    }, true);
   }
 
   toggleFrozen(id: number): void {

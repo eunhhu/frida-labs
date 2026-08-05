@@ -2,7 +2,7 @@
 // filter, minimum-level filter, freeze (pin the view while the ring keeps
 // collecting), crash report view, and a hook-state probe.
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Box, Text, useInput } from "ink";
 import { inspect } from "node:util";
 import { workbench } from "./workbench.js";
@@ -11,24 +11,26 @@ import { store, type LogLine, type SessionState } from "./store.js";
 const VIEW = 20;
 const LEVELS: Array<LogLine["level"] | "all"> = ["all", "info", "ok", "warn", "error"];
 const LEVEL_RANK: Record<LogLine["level"], number> = { info: 0, ok: 1, warn: 2, error: 3 };
+type ObserveView = "logs" | "actions" | "debug" | "crashes";
+const VIEWS: ObserveView[] = ["logs", "actions", "debug", "crashes"];
 
 const levelTint: Record<LogLine["level"], string> = {
   info: "gray", ok: "green", warn: "yellow", error: "red",
 };
 
-function matches(l: LogLine, filter: string, minLevel: LogLine["level"] | "all"): boolean {
+export function matches(l: LogLine, filter: string, minLevel: LogLine["level"] | "all"): boolean {
   if (minLevel !== "all" && LEVEL_RANK[l.level] < LEVEL_RANK[minLevel]) return false;
   if (filter && !l.text.toLowerCase().includes(filter.toLowerCase())) return false;
   return true;
 }
 
-export function Observe(props: { session: SessionState; focused: boolean }): React.JSX.Element {
+export function Observe(props: { session: SessionState; focused: boolean; onCaptureChange?(active: boolean): void }): React.JSX.Element {
   const { session } = props;
   const [filter, setFilter] = useState("");
   const [filtering, setFiltering] = useState(false);
   const [minLevel, setMinLevel] = useState<LogLine["level"] | "all">("all");
   const [scroll, setScroll] = useState(0);
-  const [showCrashes, setShowCrashes] = useState(false);
+  const [view, setView] = useState<ObserveView>("logs");
   const [frozenView, setFrozenView] = useState<LogLine[] | null>(null);
   const [hookState, setHookState] = useState<string | null>(null);
 
@@ -37,9 +39,16 @@ export function Observe(props: { session: SessionState; focused: boolean }): Rea
   const end = Math.max(VIEW, visible.length - scroll);
   const slice = visible.slice(Math.max(0, end - VIEW), end);
 
+  useEffect(() => () => props.onCaptureChange?.(false), [props.onCaptureChange]);
+
+  const setFilteringCaptured = (active: boolean): void => {
+    setFiltering(active);
+    props.onCaptureChange?.(active);
+  };
+
   useInput((ch, key) => {
     if (filtering) {
-      if (key.return || key.escape) { setFiltering(false); return; }
+      if (key.return || key.escape) { setFilteringCaptured(false); return; }
       if (key.backspace || key.delete) { setFilter((f) => f.slice(0, -1)); return; }
       if (key.ctrl || key.meta) return;
       if (ch) setFilter((f) => f + ch);
@@ -47,7 +56,7 @@ export function Observe(props: { session: SessionState; focused: boolean }): Rea
     }
     if (key.pageDown) { setScroll((s) => Math.max(0, s - VIEW)); return; }
     if (key.pageUp) { setScroll((s) => s + VIEW); return; }
-    if (ch === "/") { setFiltering(true); return; }
+    if (ch === "/") { setFilteringCaptured(true); return; }
     if (ch === "x") { setFilter(""); setMinLevel("all"); return; }
     if (ch === "l") {
       setMinLevel((cur) => LEVELS[(LEVELS.indexOf(cur) + 1) % LEVELS.length]!);
@@ -63,23 +72,24 @@ export function Observe(props: { session: SessionState; focused: boolean }): Rea
       }
       return;
     }
-    if (ch === "c") { setShowCrashes((v) => !v); return; }
+    if (ch === "v") { setView((current) => VIEWS[(VIEWS.indexOf(current) + 1) % VIEWS.length]!); return; }
+    if (ch === "c") { setView("crashes"); return; }
+    if (ch === "a") { setView("actions"); return; }
+    if (ch === "d") { setView("debug"); return; }
     if (ch === "h") {
-      const handle = workbench.handle(session.id);
-      if (!handle) return;
       setHookState("probing …");
-      void handle
-        .eval('typeof hookState === "function" ? await hookState() : "(target exports no hookState)"')
-        .then((r) => setHookState(inspect(r, { colors: false, depth: 4 })))
-        .catch((e) => setHookState((e as Error).message));
+      void workbench
+        .eval(session.id, 'typeof hookState === "function" ? await hookState() : "(target exports no hookState)"')
+        .then((result) => setHookState(inspect(result, { colors: false, depth: 4 })))
+        .catch((error) => setHookState((error as Error).message));
     }
   }, { isActive: props.focused });
 
   return (
     <Box flexDirection="column" flexGrow={1} paddingX={1}>
-      <Box justifyContent="space-between">
-        <Text bold>observe</Text>
-        <Text dimColor>/ filter · l level({minLevel}) · f freeze · c crashes · h hook state · pgup/pgdn</Text>
+      <Box flexDirection="column">
+        <Text bold>observe · <Text color="cyan">{view}</Text></Text>
+        <Text dimColor>v cycle · a actions · d debug · c crashes · / filter · l level({minLevel}) · f freeze</Text>
       </Box>
       {session.dropped > 0 && (
         <Text dimColor>… {session.dropped} line(s) evicted from the 5000-line ring</Text>
@@ -91,12 +101,36 @@ export function Observe(props: { session: SessionState; focused: boolean }): Rea
         </Box>
       )}
       {!filtering && filter && <Text dimColor>filter: "{filter}" ({visible.length} match)</Text>}
-      {showCrashes ? (
+      {view === "crashes" ? (
         <Box flexDirection="column">
           <Text bold color="red">crashes ({session.crashes.length})</Text>
           {session.crashes.length === 0 && <Text dimColor>none — excrash install() reports appear here</Text>}
           {session.crashes.slice(-VIEW).map((c, i) => (
             <Text key={i} color="red">{inspect(c, { colors: false, depth: 3, breakLength: 120 })}</Text>
+          ))}
+        </Box>
+      ) : view === "actions" ? (
+        <Box flexDirection="column" flexGrow={1}>
+          <Text bold>action receipts ({session.receipts.length})</Text>
+          {session.droppedReceipts > 0 && <Text dimColor>… {session.droppedReceipts} receipt(s) evicted</Text>}
+          {session.receipts.length === 0 && <Text dimColor>none — Explorer calls appear here</Text>}
+          {session.receipts.slice(-VIEW).map((receipt, index) => (
+            <Text key={`${receipt.startedAt}-${index}`} color={receipt.status === "failed" ? "red" : receipt.status === "running" ? "yellow" : "green"}>
+              {receipt.status.padEnd(7)} {receipt.mode.padEnd(10)} {receipt.action}
+              {receipt.verification ? ` · ${receipt.verification.state} fired=${receipt.verification.fired}` : ""}
+              {receipt.error ? ` · ${receipt.error.code}: ${receipt.error.message}` : ""}
+            </Text>
+          ))}
+        </Box>
+      ) : view === "debug" ? (
+        <Box flexDirection="column" flexGrow={1}>
+          <Text bold>debug evidence ({session.debugEvents.length})</Text>
+          {session.droppedDebugEvents > 0 && <Text dimColor>… {session.droppedDebugEvents} event(s) evicted</Text>}
+          {session.debugEvents.length === 0 && <Text dimColor>none — lifecycle, crash, and hook receipts appear here</Text>}
+          {session.debugEvents.slice(-VIEW).map((event, index) => (
+            <Text key={`${event.timestamp}-${index}`} color={event.kind.includes("crash") || event.kind === "agent-exception" ? "red" : "gray"}>
+              {event.kind.padEnd(17)} {event.summary}{event.verification ? ` · ${event.verification.state} fired=${event.verification.fired}` : ""}
+            </Text>
           ))}
         </Box>
       ) : (

@@ -61,6 +61,9 @@ export class Esp {
   private map: ClassMap | null = null;
   private cam: NativePointer | null = null;
   private enemies: Enemy[] = [];
+  /** Serialize install/remove so a slow discovery cannot resurrect a hook
+   *  after a later remove or leave two concurrent installs alive. */
+  private operations: Promise<void> = Promise.resolve();
   frames = 0;
   test = false;
 
@@ -84,11 +87,21 @@ export class Esp {
     }).sort((a, b) => a.dist - b.dist);
   }
 
-  async install(): Promise<string> {
+  private enqueue<T>(op: () => T | Promise<T>): Promise<T> {
+    const result = this.operations.then(op);
+    this.operations = result.then(() => undefined, () => undefined);
+    return result;
+  }
+
+  install(): Promise<string> {
+    return this.enqueue(() => this.installNow());
+  }
+
+  private async installNow(): Promise<string> {
+    this.removeNow();
     this.refresh();
     const self = this;
-    this.timer = setInterval(() => self.refresh(), 2000); // heavy scan off the render path
-    return this.canvas.hookRender((cv, W, H) => {
+    const result = await this.canvas.hookRender((cv, W, H) => {
       self.frames++;
       if (self.test) self.canvas.drawBox(cv, W / 2 - 120, H / 2 - 120, 240, 240, 4, 1, 1, 0, 1);
       const cam = self.cam; if (!cam) return;
@@ -103,9 +116,17 @@ export class Esp {
         self.canvas.drawBox(cv, s.x - bw / 2, s.y - bh / 2, bw, bh, 2.5, c[0], c[1], c[2], 1);
       }
     });
+    if (this.canvas.hooked) {
+      this.timer = setInterval(() => self.refresh(), 2000); // heavy scan off the render path
+    }
+    return result;
   }
 
-  remove(): string {
+  remove(): Promise<string> {
+    return this.enqueue(() => this.removeNow());
+  }
+
+  private removeNow(): string {
     if (this.timer) { clearInterval(this.timer); this.timer = null; }
     return this.canvas.unhook();
   }

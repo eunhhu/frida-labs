@@ -35,8 +35,7 @@ function collect(dir: string, base: string, out: string[]): void {
   }
 }
 
-const FN_RE = /export\s+(?:async\s+)?(?:function|const)\s+([A-Za-z_$][\w$]*)\s*(?:=\s*(?:async\s*)?\(|[<(])([^\n]*)/;
-const METHOD_RE = /^\s{2}(?:async\s+)?([A-Za-z_$][\w$]*)\s*(\([^)]*\)[^{:=]*)[:=]/;
+const FN_RE = /^\s*export\s+(?:async\s+)?(?:function|const)\s+([A-Za-z_$][\w$]*)\s*(?:=\s*(?:async\s*)?\(|[<(])([^\n]*)/;
 
 function parseFile(abs: string, rel: string): LibModule {
   const src = readFileSync(abs, "utf8");
@@ -46,6 +45,7 @@ function parseFile(abs: string, rel: string): LibModule {
   // header comment block
   const header: string[] = [];
   for (const l of lines) {
+    if (/^\/\/\/\s*<reference\b/.test(l)) continue;
     if (l.startsWith("//")) header.push(l.replace(/^\/\/\s?/, ""));
     else if (l.trim() === "") { if (header.length) break; }
     else break;
@@ -72,13 +72,8 @@ function parseFile(abs: string, rel: string): LibModule {
       continue;
     }
 
-    const method = line.match(METHOD_RE);
-    if (method) {
-      mod.functions.push({ name: method[1]!, signature: `${method[1]}${method[2]!.trim()}`, doc: pendingDoc });
-      pendingDoc = "";
-      continue;
-    }
-    if (line.trim() && !line.trim().startsWith("*") && !line.trim().startsWith("//")) pendingDoc = pendingDoc; // keep doc across blank-ish lines
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith("*") && !trimmed.startsWith("//")) pendingDoc = "";
   }
   return mod;
 }

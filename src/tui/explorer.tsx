@@ -1,10 +1,9 @@
 // Explorer — describe()-driven signature browser: navigate the rpc surface,
 // fill in args, invoke, inspect the result. Reads the session's cached
-// RpcDescriptor[] from the store; invokes through the workbench handle.
+// RpcDescriptor[] from the store; invokes through the canonical ActionService.
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Box, Text, useInput } from "ink";
-import { inspect } from "node:util";
 import type { RpcDescriptor } from "../core/index.js";
 import { workbench } from "./workbench.js";
 import { store, type SessionState } from "./store.js";
@@ -17,17 +16,19 @@ function signature(d: RpcDescriptor): string {
   return `${d.name}(${args})`;
 }
 
-function parseArgs(line: string): unknown[] {
+function parseRawArgs(line: string): string[] {
   const trimmed = line.trim();
   if (!trimmed) return [];
   try {
-    const v: unknown = JSON.parse(`[${trimmed}]`);
-    if (Array.isArray(v)) return v;
-  } catch { /* fall through to single-string arg */ }
+    const values = JSON.parse(`[${trimmed}]`) as unknown;
+    if (Array.isArray(values)) {
+      return values.map((value) => typeof value === "string" ? value : JSON.stringify(value));
+    }
+  } catch { /* preserve the exact text as one string argument */ }
   return [trimmed];
 }
 
-export function Explorer(props: { session: SessionState; focused: boolean }): React.JSX.Element {
+export function Explorer(props: { session: SessionState; focused: boolean; onCaptureChange?(active: boolean): void }): React.JSX.Element {
   const { session } = props;
   const [cursor, setCursor] = useState(0);
   const [argTarget, setArgTarget] = useState<RpcDescriptor | null>(null);
@@ -35,32 +36,49 @@ export function Explorer(props: { session: SessionState; focused: boolean }): Re
   const [busy, setBusy] = useState(false);
   const [resultOffset, setResultOffset] = useState(0);
 
+  const beginArgs = (descriptor: RpcDescriptor): void => {
+    setArgTarget(descriptor);
+    props.onCaptureChange?.(true);
+  };
+
+  const endArgs = (): void => {
+    setArgTarget(null);
+    setArgInput("");
+    props.onCaptureChange?.(false);
+  };
   const list = session.describe ?? [];
   const clamped = Math.min(cursor, Math.max(0, list.length - 1));
 
-  const invoke = async (d: RpcDescriptor, args: unknown[]): Promise<void> => {
-    const handle = workbench.handle(session.id);
-    if (!handle) return;
+  const invoke = async (descriptor: RpcDescriptor, rawArgs: string[]): Promise<void> => {
     setBusy(true);
     try {
-      const r = await handle.call(d.name, args);
-      store.setResult(session.id, true, r === undefined ? "(undefined)" : inspect(r, { colors: false, depth: 6 }));
-      store.pushHistory(session.id, `${d.name}(${args.map((a) => JSON.stringify(a) ?? "?").join(", ")})`);
-    } catch (e) {
-      store.setResult(session.id, false, (e as Error).message);
+      const receipt = await workbench.invokeAction(session.id, "instrument", descriptor.name, rawArgs);
+      const page = receipt.result;
+      const text = [
+        page.summary,
+        ...page.rows,
+        ...(page.truncated ? [`… truncated${page.nextOffset === undefined ? "" : `; next offset ${page.nextOffset}`}`] : []),
+        ...(receipt.verification ? [`verification: ${receipt.verification.state} · fired=${receipt.verification.fired}`] : []),
+        ...receipt.warnings.map((warning) => `warning: ${warning}`),
+      ].join("\n");
+      store.setResult(session.id, receipt.status === "passed", receipt.error?.message ?? text);
+      store.pushHistory(session.id, `instrument:${descriptor.name}(${rawArgs.map((arg) => JSON.stringify(arg)).join(", ")})`);
+    } catch (error) {
+      store.setResult(session.id, false, (error as Error).message);
     }
     setResultOffset(0);
     setBusy(false);
   };
 
+  useEffect(() => () => props.onCaptureChange?.(false), [props.onCaptureChange]);
+
   useInput((ch, key) => {
     if (argTarget) {
-      if (key.escape) { setArgTarget(null); setArgInput(""); return; }
+      if (key.escape) { endArgs(); return; }
       if (key.return) {
         const d = argTarget;
-        setArgTarget(null);
-        const args = parseArgs(argInput);
-        setArgInput("");
+        const args = parseRawArgs(argInput);
+        endArgs();
         void invoke(d, args);
         return;
       }
@@ -74,11 +92,10 @@ export function Explorer(props: { session: SessionState; focused: boolean }): Re
     else if (key.pageDown) setResultOffset((o) => o + RESULT_LINES);
     else if (key.pageUp) setResultOffset((o) => Math.max(0, o - RESULT_LINES));
     else if (ch === "r") {
-      const handle = workbench.handle(session.id);
-      if (handle) void handle.describe().then((d) => store.setDescribe(session.id, d)).catch(() => {});
+      void workbench.refreshDescribe(session.id).catch(() => {});
     } else if (key.return && list[clamped] && !busy) {
       const d = list[clamped]!;
-      if (d.args?.length) setArgTarget(d);
+      if (d.args?.length) beginArgs(d);
       else void invoke(d, []);
     }
   }, { isActive: props.focused });
@@ -90,8 +107,8 @@ export function Explorer(props: { session: SessionState; focused: boolean }): Re
 
   return (
     <Box flexDirection="column" flexGrow={1} paddingX={1}>
-      <Box justifyContent="space-between">
-        <Text bold>explorer</Text>
+      <Box flexDirection="column">
+        <Text bold>explorer · Instrument RPC surface</Text>
         <Text dimColor>↑/↓ select · enter call · r refresh · pgup/pgdn result</Text>
       </Box>
       {session.describe === null && <Text dimColor>describe() not loaded yet (or target has no __describe)…</Text>}
@@ -101,13 +118,14 @@ export function Explorer(props: { session: SessionState; focused: boolean }): Re
         return (
           <Text key={d.name} color={idx === clamped ? "cyan" : undefined}>
             {idx === clamped ? "❯ " : "  "}{signature(d)}
-            {d.doc ? <Text dimColor>  — {d.doc.split("\n")[0]}</Text> : null}
+            <Text color={d.effect === "write" || d.effect === "hook" ? "yellow" : "gray"}> [{d.effect ?? "control"}/{d.returns ?? "json"}]</Text>
+            {d.doc ? <Text dimColor> — {d.doc.split("\n")[0]}</Text> : null}
           </Text>
         );
       })}
       {argTarget && (
         <Box>
-          <Text color="yellow">args for {argTarget.name} (JSON, comma-sep): </Text>
+          <Text color="yellow">args for {argTarget.name} (JSON values, comma-sep): </Text>
           <Text>{argInput}</Text>
         </Box>
       )}

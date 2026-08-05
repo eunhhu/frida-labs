@@ -41,13 +41,11 @@ export function Repl(props: { session: SessionState; focused: boolean }): React.
   const table = macroTable(session.id);
 
   const runEval = async (src: string): Promise<void> => {
-    const handle = workbench.handle(session.id);
-    if (!handle) return;
     setBusy(true);
     store.pushLog(session.id, `${session.target}> ${src}`);
     store.pushHistory(session.id, src);
     try {
-      const r = await handle.eval(src);
+      const r = await workbench.eval(session.id, src);
       const text = r === undefined ? "(undefined)" : inspect(r, { colors: false, depth: 6 });
       store.setResult(session.id, true, text.split("\n").slice(0, PAGE_CAPTURE).join("\n"));
     } catch (e) {
@@ -161,7 +159,7 @@ export function Repl(props: { session: SessionState; focused: boolean }): React.
 
   return (
     <Box flexDirection="column" flexGrow={1} paddingX={1}>
-      <Box justifyContent="space-between">
+      <Box flexDirection="column">
         <Text bold>repl</Text>
         <Text dimColor>:help · tab complete · ↑/↓ history · \ multiline · pgup/pgdn result</Text>
       </Box>

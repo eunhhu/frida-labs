@@ -2,9 +2,10 @@
 // the repo root) so the tool itself, any script, and any agent can read or
 // edit it without importing TypeScript.
 
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { DeviceSelector } from "./devices.js";
 
 export interface TargetConfig {
   /** Process name for attach, or executable path for spawn. Windows-style
@@ -13,12 +14,18 @@ export interface TargetConfig {
   /** Per-platform override for `process` (e.g. { "darwin": "Game.bin.osx" }). */
   processByPlatform?: Partial<Record<string, string>>;
   mode: "attach" | "spawn";
+  /** Default Frida device. Runtime --device/--host overrides this. */
+  device?: DeviceSelector;
   /** Agent entry, repo-relative. Convention: agent/targets/<name>/index.ts */
   entry: string;
+  /** Forward-compatible target metadata is preserved by project mutations. */
+  [key: string]: unknown;
 }
 
 export interface Manifest {
   targets: Record<string, TargetConfig>;
+  /** Forward-compatible workspace metadata is preserved by project mutations. */
+  [key: string]: unknown;
 }
 
 /** Repo root: two levels up from this file, or cwd when running from a
@@ -32,30 +39,24 @@ export function repoRoot(): string {
 const MANIFEST = "frida-labs.json";
 export const PROBE_TARGET = "_probe";
 
-export function loadManifest(): Manifest {
-  const p = join(repoRoot(), MANIFEST);
+export function loadManifest(root: string = repoRoot()): Manifest {
+  const p = join(root, MANIFEST);
   if (!existsSync(p)) return { targets: {} };
   return JSON.parse(readFileSync(p, "utf8")) as Manifest;
 }
 
-export function saveManifest(m: Manifest): void {
-  writeFileSync(join(repoRoot(), MANIFEST), JSON.stringify(m, null, 2) + "\n");
-}
 
 export function listTargets(m: Manifest = loadManifest()): string[] {
   return Object.keys(m.targets).filter((t) => t !== PROBE_TARGET);
 }
 
-export function getTarget(name: string, m: Manifest = loadManifest()): TargetConfig {
+export function getTarget(
+  name: string,
+  m: Manifest = loadManifest(),
+  platform: string | null = process.platform,
+): TargetConfig {
   const cfg = m.targets[name];
   if (!cfg) throw new Error(`unknown target "${name}". known: ${listTargets(m).join(", ") || "(none)"}`);
-  const override = cfg.processByPlatform?.[process.platform];
+  const override = platform === null ? undefined : cfg.processByPlatform?.[platform];
   return override ? { ...cfg, process: override } : cfg;
-}
-
-export function addTarget(name: string, cfg: TargetConfig): void {
-  const m = loadManifest();
-  if (m.targets[name]) throw new Error(`target "${name}" already exists`);
-  m.targets[name] = cfg;
-  saveManifest(m);
 }
