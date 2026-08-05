@@ -1,216 +1,230 @@
-# frida-labs
+# flab
 
-Cross-game Frida debugging workspace. One reusable agent library, one
-per-game target folder, one Bun host that compiles, injects, hot-reloads,
-and gives you a REPL (or an ink TUI) into the live game process.
+Analyze and mod an authorized offline or single-player game with Frida.
 
-Everything runs on the **Bun runtime only** — no make, no shell scripts,
-Windows and Unix alike.
+flab has one simple flow:
 
-## Setup
+```text
+1 Connect a game  →  2 Use Mods  →  3 Inspect what is happening
+```
+
+The TUI is for people. The structured CLI is for AI agents. Both use the same
+device, session, action, and cleanup engine.
+
+## Start in 60 seconds
 
 ```sh
 bun install
+bun run flab
 ```
 
-## Let an AI harness build the game mod
+Then use the screen in this order (the number keys switch directly):
 
-The repository ships one completion contract and native entry points for GJC,
-Codex, Claude Code, and OpenCode. Give the agent the game, process or bundle id,
-device, attach/spawn mode, and feature priorities. The finished target must
-produce the same game-specific TUI mod menu, REPL, and persistent AI action
-surface, with live cleanup/reattach evidence.
+1. Press `1`: **Connect** — type the game name, choose it, and press Enter.
+2. Press `2`: **Mods** — run the connected game's named controls and QoL actions.
+3. Press `3`: **Inspect** — read game structure, hook checks, errors, and live output.
+
+Press `Ctrl+V` to switch local, USB/mobile, exact, or remote devices. Press
+`Ctrl+P` only when you need advanced tools such as manual PID/spawn, REPL,
+memory explorer, or target management.
+
+You do not need to learn the full CLI to use the TUI.
+
+## Choose one entry point
+
+| Goal | Use | Start with |
+| --- | --- | --- |
+| Connect and use a game manually | Guided TUI | `bun run flab` |
+| Ask a coding agent to build a game-specific mod | Harness skill | See “Build a mod with an AI harness” below |
+| Control one live session from software | Persistent JSON CLI | `bun run flab -- capabilities --json` |
+| Run one bounded operation | Regular CLI | `bun run flab -- --help` |
+
+An AI agent should not scrape the TUI or send arrow keys. It should keep one
+`--session --json` child process open and exchange typed NDJSON requests.
+
+## Connect local, USB/mobile, or remote
+
+The selected device remains the same through process discovery, attach/spawn,
+reconnect, and verification.
 
 ```sh
-# GJC
-gjc '/skill:build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="QoL, player, world, content"'
+# See every reachable Frida device
+bun run flab -- devices
 
-# Codex
-codex '$build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="QoL, player, world, content"'
+# Search a local process
+bun run flab -- processes Terraria
 
-# Claude Code
-claude '/build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="QoL, player, world, content"'
+# Search the first USB/mobile device
+bun run flab -- processes Terraria --device usb
 
-# OpenCode: start `opencode`, then enter this command
-/game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="QoL, player, world, content"
+# Use one exact discovered device
+bun run flab -- processes Terraria --device <device-id>
+
+# Use an explicit frida-server endpoint
+bun run flab -- processes Terraria --host 10.0.0.8:27042
 ```
 
-Read the full [AI harness game-mod guide](docs/agent-game-mod-guide.md) for
-headless commands, USB/mobile/remote selectors, the recon sequence, descriptor
-contract, coverage matrix, runtime tests, and the exact definition of done.
+Selector summary:
 
-## Drive a game
+| Target | Selector |
+| --- | --- |
+| This computer | `--device local` |
+| First USB/mobile device | `--device usb` |
+| First discovered remote | `--device remote` |
+| Exact visible device | `--device <id>` |
+| Explicit endpoint | `--host host:port` |
+
+A PID belongs only to the device where it was discovered.
+
+## Build a mod with an AI harness
+
+Give the agent five facts. Plain language is fine:
+
+```text
+Use the build-game-mod workflow.
+Game: Terraria
+Process: Terraria.exe
+Device: local
+Start mode: attach
+Wanted features: progression, resources, combat, cooldowns, inventory, content, and QoL
+
+This is my authorized offline/single-player instance. Finish the game-specific
+menu, REPL, persistent AI controls, cleanup, reattach, and live verification.
+```
+
+Invoke the repository skill with the syntax your harness understands:
+
+| Harness | Skill entry |
+| --- | --- |
+| GJC | `/skill:build-game-mod` |
+| Codex CLI/app | `$build-game-mod` or **Build Game Mod** |
+| Claude Code | `/build-game-mod` |
+| OpenCode | `/game-mod` |
+
+For example:
 
 ```sh
-flab processes                     # discover live processes + target matches
-flab devices                       # list local, USB/mobile, and connected remote devices
-flab processes --device usb        # discover processes on the first USB device
-flab probe --pid 1234 --device <id> # PID is resolved only on that exact device
-flab probe com.example.game --device usb --spawn
-flab run <target> --host 10.0.0.8:27042 # explicit frida-server endpoint
-flab probe "Some Game.exe"         # one-shot generic analysis attach by name
-flab probe --pid 1234              # explicit PID attach; positional digits stay names
-flab capabilities --json           # AI-agent protocol + instrument lifecycle schema
-flab probe --pid 1234 --session --json # persistent NDJSON agent session
-flab run <target>                 # compile + attach + REPL (hot reload on save)
-flab run <target> --spawn         # spawn instead of attach
-flab tui                          # five-mode TUI: Project/Instrument/Debug/Probe/Analysis
-flab tui <target>                 # TUI, attach target and open Instrument mode
-flab build <target>               # compile only
-flab targets                      # list registered targets
-flab target set <target> --proc P # update target
-flab target rename <old> <new>    # rename registry + conventional sources
-flab target unregister <name>     # remove registry entry; preserve source files
-flab target delete <name> --confirm <name>
-flab depcheck                     # enforce targets → agent/lib dependency direction
-flab doctor                       # environment sanity (runtime, frida server, processes)
-bun run typecheck                 # agent + host typecheck
+codex '$build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="progression, resources, combat, inventory, content, QoL"'
 ```
 
-The TUI starts in **Project** mode so target lifecycle is visible immediately.
-`Ctrl+P` opens the mode/action palette. **Probe** attaches by name/PID or spawns;
-its target-launch form exposes spawn- and child-gating independently.
-**Instrument** puts the managed create/list/status/update/stop/delete lifecycle
-first, then retains Actions, REPL, Explorer, and Observe without recreating
-sessions. Stable instrument IDs preserve ownership and verification history.
-**Debug** centers crash, exception, detach,
-and hook-verification evidence. **Analysis** permits only live-descriptor actions
-authorized as `analysis` + `read`; `j`/`k` scroll retained rows and
-`PageUp`/`PageDown` re-run the action for bounded result pages rather than slicing
-cached data.
+The complete copy-paste commands, remote/mobile variants, safety boundary,
+recon sequence, coverage matrix, and definition of done are in
+[the AI harness guide](docs/agent-game-mod-guide.md).
 
-The left sidebar always shows the selected device. `v` cycles currently visible
-local/USB/remote devices, refreshes that device's process list, and binds later
-attach/spawn/reconnect operations to the same identity. Start with
-`flab tui --host HOST[:PORT]` for an endpoint not already visible. The process
-list supports `/` filtering, shows the exact PID for duplicate
-names, and uses `◆` for processes that match a registered target. `n` opens a
-target-create form prefilled from the selected process. `Ctrl+D/T/S` focus the persistent process/target/session
-sidebar, `Tab` returns to the panel, and `Ctrl+R/W/Q` reconnect, close, and exit.
-While a form owns text, Escape cancels it and other global shortcuts do not
-consume the input. Project delete requires the exact target name in its TUI
-confirmation form.
+The latest physical Android device run, per-game coverage, blocked scope, and
+reproducible verification results are in
+[the Android live-verification report](docs/android-live-verification.md).
 
-`flab` is `bun run flab` (bin: `src/bin.ts`) or the compiled binary from
-`bun run build-bin`. Every command takes `--json` for agent consumption.
+A finished target provides the same game actions through:
 
-Targets are registered in `frida-labs.json` — the file is the list. A target may
-store a default selector such as `{"kind":"usb"}`, `{"kind":"id","id":"..."}`,
-or `{"kind":"endpoint","address":"host:27042"}` in its `device` field. Runtime
-`--device`/`--host` overrides it. The
-manifest stores the Windows process name (`Game.exe`); on macOS/Linux the
-session layer automatically also matches the extension-less name.
+- a readable game-specific menu in `bun run flab -- tui <target>`;
+- a human REPL in `bun run flab -- run <target>`;
+- a persistent agent session in `bun run flab -- run <target> --session --json`;
+- a target-local README with tested commands, features, cleanup, and limits.
 
-## Recon a new game before writing a target
+## Common commands
+
+Run `bun run flab -- --help` for the grouped overview, or append `--help` to a
+command for its exact usage.
+
+### Connect and use
 
 ```sh
-flab probe "Some Game.exe"
+bun run flab                              # guided TUI
+bun run flab -- tui terraria              # connect one saved game immediately
+bun run flab -- devices                   # reachable devices
+bun run flab -- processes Terraria        # search running apps
+bun run flab -- run terraria              # saved target + human REPL
+bun run flab -- probe --pid 1234           # generic quick analysis
 ```
 
-`_probe` injects an engine-agnostic agent into any process: it detects
-Unity (IL2CPP / Mono), Unreal, Cocos2d-x, FNA, and exposes the matching
-exploration surface (module/export browsing, memory scan/peek/poke/freeze/
-watch, string search, tracing, plus Mono class/method introspection).
-`--pid <positive-integer>` selects numeric attach explicitly; a positional string
-of digits remains a process name. One-shot Probe stays convenient for a single
-query. For AI agents, `--session --json` keeps the same attach alive and accepts
-strict `flab.ndjson.v1` requests (`ping`, `describe`, typed `action`, `close`) on
-stdin while stdout stays NDJSON-only and diagnostics go to stderr.
-
-## AI agent session
-
-Discover the complete contract first:
+### Save and manage games
 
 ```sh
-flab capabilities --json
-flab probe --pid 1234 --session --json
+bun run flab -- targets
+bun run flab -- new terraria "Terraria.exe"
+bun run flab -- target set terraria --proc "Terraria.exe"
+bun run flab -- target rename old-name new-name
+bun run flab -- target unregister terraria
+bun run flab -- target delete terraria --confirm terraria
 ```
 
-Then send one JSON object per line. The `ready` envelope already includes every
-live descriptor and resolved device identity, so an agent can see all allowed
-actions and verify where the PID lives before calling one:
+`unregister` keeps source files. `delete` removes conventional target sources
+and requires the exact target name.
+
+### Diagnose and validate
+
+```sh
+bun run flab -- doctor
+bun run flab -- build terraria
+bun run flab -- depcheck
+bun run typecheck
+bun test
+bun run test:runtime
+```
+
+If you built the standalone binary with `bun run build-bin`, replace
+`bun run flab --` with `./flab`.
+
+## Persistent AI session
+
+Discover the contract, then start exactly one long-lived process:
+
+```sh
+bun run flab -- capabilities --json
+bun run flab -- probe --pid 1234 --session --json
+```
+
+The first stdout line is a `ready` envelope containing the resolved device,
+PID, and every allowed action. Send one JSON object per line:
 
 ```json
-{"id":"1","op":"action","mode":"analysis","action":"modules","args":["unity"]}
-{"id":"2","op":"action","mode":"instrument","action":"instrumentStart","args":["trace","0x1234","{\"label\":\"damage\",\"args\":2}"]}
-{"id":"3","op":"action","mode":"analysis","action":"instrumentStatus","args":["ins-1"]}
-{"id":"4","op":"close"}
+{"id":"1","op":"describe"}
+{"id":"2","op":"action","mode":"analysis","action":"modules","args":[""]}
+{"id":"3","op":"close"}
 ```
 
-Machine actions cross the same live-descriptor authorization, argument coercion,
-bounded result, and verification path as the TUI. Run `bun run test:runtime` for
-the opt-in native fixture test covering attach, analysis, trace/watch/freeze,
-managed CRUD, cleanup, reattach, and the public NDJSON transport.
+Managed trace, watch, and freeze actions return stable instrument IDs for
+status, update, stop, and delete. Diagnostics stay on stderr; stdout remains
+NDJSON-only. The protocol is `flab.ndjson.v1`.
 
-## Add a target
+## What a saved game target contains
 
-```sh
-flab new <name> ["Process Name.exe"]
+Targets live in `agent/targets/<game>/index.ts` and are registered in
+`frida-labs.json`. Their `__describe()` metadata drives all three interfaces.
+
+Use short labels and stable categories such as `System`, `Player`, `World`,
+`Inventory`, `Entities`, `Content`, `QoL`, and `Debug`. Mark each action's
+arguments, read/write effect, return type, and capabilities truthfully.
+
+Required target behavior:
+
+- make game-specific progression/combat/resource/content actions the primary menu when callable paths exist; treat FPS and keep-awake as secondary QoL;
+- expose real discovery, status, and cleanup actions;
+- keep mutations off by default and validate ranges;
+- capture original state before writes and restore it on reset/detach;
+- own hooks, timers, watches, and freezes with removable handles;
+- return bounded JSON-serializable values;
+- report unsupported systems instead of inventing offsets or coverage.
+
+## Repository map
+
+```text
+agent/lib/                 reusable engine, memory, hook, watch, and instrument code
+agent/targets/<game>/      game-specific glue and descriptors
+src/core/                  shared device, session, action, project, and JSON protocol engine
+src/tui/                   human Connect → Mods → Inspect interface
+src/cli/                   command-line adapter over the same core
+tests/                     unit, protocol, TUI, launch, and native Frida runtime checks
+docs/agent-game-mod-guide.md  full multi-harness execution contract
 ```
 
-Scaffolds `agent/targets/<name>/index.ts` and registers it transactionally in
-`frida-labs.json`. `flab target` provides update/rename/unregister/delete
-operations with rollback-safe source handling. Unregister preserves sources;
-delete requires `--confirm <exact-name>`. JSON target mutations use exact success
-and failure objects so CLI consumers can match them by deep equality. Edit the
-entry; every save hot-reloads.
+Frontends import `src/core/index.ts`; they do not implement separate session or
+Frida behavior. Targets may import reusable code only from `agent/lib/`, which
+`flab depcheck` enforces.
 
-## Layout
+## Safety boundary
 
-```
-agent/
-  lib/                  reusable engines: mem, hook, search, mono/, ue/, il2cpp,
-                        detect, watch, instruments, strings, cocos, log
-  targets/<game>/       per-game code — entry is index.ts
-src/
-  bin.ts                flab entry (CLI vs TUI dispatch)
-  core/
-    index.ts            public barrel — the programmatic interface
-    manifest.ts         frida-labs.json target registry
-    session.ts          compile / attach / inject / hot-reload / rpc engine
-    actions.ts          action policy, coercion, bounded receipts/debug events
-    machine.ts          strict persistent NDJSON protocol for AI agents
-    devices.ts          local/USB/device-id/remote selection and identity
-    processes.ts        live process discovery and target matching
-    lifecycle.ts        Device spawn/child gating + crash signals
-    commands.ts         CLI registry + exact target mutation contracts
-    depcheck.ts         targets → agent/lib dependency-direction gate
-    compile.ts          frida-compile wrapper (build + watch)
-    projects.ts         transactional target lifecycle
-    scaffold.ts         backward-compatible flab new adapter
-    libref.ts           bounded agent/lib callable surface catalog
-  cli/index.ts          argv → registry frontend
-  tui/index.tsx         five-mode ink frontend over core services
-```
-
-`src/core/index.ts` is the single programmatic interface: frontends import
-the barrel, never individual core modules.
-
-## Conventions
-
-- `rpc.exports` is the entire control surface; return JSON-serializable
-  values only (pointers as strings). Call them by bare name in the REPL/TUI.
-  Targets also expose `__describe()` returning the rpc surface (`name`, typed
-  `args`, `doc`, `capabilities`, `effect`, `returns`) for tooling introspection.
-  Add human-facing `label` and `category` fields to turn the descriptor list
-  into a readable game-specific mod menu without changing stable RPC names.
-  `GameSession.describe()` fails closed when that live descriptor is missing,
-  malformed, or throws; cached/export-name authorization is never substituted.
-- Log through `lib/log.ts` (`ok`/`warn`/`err`) — never bare `console.log`
-  (module load order is not deterministic across targets).
-- Reusable code belongs in `agent/lib/`; targets hold only game-specific
-  glue. `flab depcheck` fails the build when a target imports anything that
-  does not resolve under `agent/lib`.
-- No TODO stubs, dead code, or commented-out experiments in merged targets.
-
-## Agent integration
-
-For complete target creation, use the
-[build-game-mod workflow](docs/agent-game-mod-guide.md). Start with
-`flab devices --json`, then `flab processes --device <selector> --json`.
-Use `flab probe <process>` or
-`flab probe --pid <positive-pid>` for one-shot discovery, then create and validate
-a reusable target. CLI and TUI integrations go through `src/core/index.ts`,
-`CommandRegistry`, and `SessionEngine`; frontends never import Frida or agent code
-directly. Device selectors are carried through discovery, attach/spawn,
-reconnect, lifecycle events, TUI status, and the machine `ready` envelope.
+Use flab only on a process and device you own or are authorized to test,
+preferably offline or single-player. Do not bypass anti-cheat, interfere with
+online play, or affect another user's process or data.

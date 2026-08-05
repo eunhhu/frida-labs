@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Box, Text, useInput } from "ink";
+import { Box, Text, useInput, useWindowSize } from "ink";
 import {
   authorizeAction,
   normalizeRpcDescriptors,
@@ -20,6 +20,25 @@ const MANAGED_ORDER = [
   "instrumentStop",
   "instrumentDelete",
   "instrumentStopAll",
+] as const;
+
+const CATEGORY_ORDER = [
+  "System",
+  "Player",
+  "World",
+  "Inventory",
+  "Entities",
+  "Content",
+  "QoL",
+  "Mod",
+  "Visual",
+  "Debug",
+  "Discovery",
+  "Inspect",
+  "Runtime",
+  "Modify",
+  "Control",
+  "Managed",
 ] as const;
 
 const CATEGORY_HINTS: Array<[RegExp, string]> = [
@@ -53,10 +72,12 @@ function actionCategory(descriptor: CanonicalRpcDescriptor): string {
       : "Control");
 }
 
-function instrumentPriority(descriptor: CanonicalRpcDescriptor): number {
+function actionPriority(descriptor: CanonicalRpcDescriptor): number {
   const managed = MANAGED_ORDER.indexOf(descriptor.name as typeof MANAGED_ORDER[number]);
-  if (managed >= 0) return managed;
-  return 100;
+  if (managed >= 0) return 10_000 + managed;
+  const category = actionCategory(descriptor);
+  const categoryIndex = CATEGORY_ORDER.indexOf(category as typeof CATEGORY_ORDER[number]);
+  return categoryIndex >= 0 ? categoryIndex * 100 : 9_000;
 }
 
 export interface ActionPanelProps {
@@ -90,6 +111,30 @@ function signature(descriptor: CanonicalRpcDescriptor): string {
   return `${descriptor.name}(${args})`;
 }
 
+function effectLabel(descriptor: CanonicalRpcDescriptor): string {
+  if (descriptor.effect === "read") return "Reads only";
+  if (descriptor.effect === "write") return "Changes game state";
+  if (descriptor.effect === "hook") return "Adds a live hook";
+  return "Controls a runtime feature";
+}
+
+function inputLabel(descriptor: CanonicalRpcDescriptor): string {
+  if (descriptor.args.length === 0) return "No input required";
+  return `Input: ${descriptor.args.map((arg) => `${arg.name}${arg.optional ? " (optional)" : ""}`).join(", ")}`;
+}
+
+function argumentHint(type: CanonicalRpcDescriptor["args"][number]["type"]): string {
+  switch (type) {
+    case "boolean": return "type exactly true or false";
+    case "number": return "type a finite number";
+    case "integer": return "type a whole number";
+    case "json": return "type valid JSON";
+    case "address": return "use a 0x-prefixed address";
+    case "pattern": return "use Frida bytes, e.g. 48 8b ?? ??";
+    default: return "type text";
+  }
+}
+
 function oneLine(value: string, limit = 240): string {
   const flattened = value.replace(/\s+/g, " ").trim();
   return flattened.length <= limit ? flattened : `${flattened.slice(0, Math.max(0, limit - 1))}…`;
@@ -114,6 +159,33 @@ interface ManagedReceiptView {
   detail?: string;
   config?: string;
   rows: string[];
+}
+
+function compactField(value: unknown): string {
+  if (value === null) return "null";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return `${value.length} item(s)`;
+  if (typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>);
+    const simple = entries
+      .filter(([, item]) => item === null || ["string", "number", "boolean"].includes(typeof item))
+      .slice(0, 6)
+      .map(([key, item]) => `${key}=${String(item)}`);
+    return simple.length ? simple.join(" · ") : `${entries.length} field(s)`;
+  }
+  return String(value);
+}
+
+function jsonReceiptView(summary: string): ManagedReceiptView | null {
+  let value: unknown;
+  try { value = JSON.parse(summary); }
+  catch { return null; }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const entries = Object.entries(value as Record<string, unknown>);
+  return {
+    headline: `${entries.length} result field(s)`,
+    rows: entries.slice(0, 6).map(([key, item]) => `${key}: ${compactField(item)}`),
+  };
 }
 
 function managedReceiptView(receipt: ActionReceipt): ManagedReceiptView | null {
@@ -157,12 +229,17 @@ function managedReceiptView(receipt: ActionReceipt): ManagedReceiptView | null {
 /** Describe-driven action chooser shared by Instrument, Analysis, and Debug. */
 export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
   const { session, mode } = props;
+  const windowSize = useWindowSize();
+  const compact = windowSize.rows < 36 || windowSize.columns < 100;
+  const minimal = windowSize.rows < 28 || windowSize.columns < 90;
+  const actionView = minimal ? 3 : compact ? 4 : ACTION_VIEW;
   const [cursor, setCursor] = useState(0);
   const [capture, setCapture] = useState<CaptureState | null>(null);
   const [busy, setBusy] = useState(false);
   const [invokeError, setInvokeError] = useState<string | null>(null);
   const [pageCursor, setPageCursor] = useState<PageCursor | null>(null);
   const [rowOffset, setRowOffset] = useState(0);
+  const [showDetails, setShowDetails] = useState(false);
 
   const normalized = useMemo(
     () => normalizeRpcDescriptors(session.describe ?? []),
@@ -172,7 +249,7 @@ export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
     () => normalized.descriptors.filter((descriptor) =>
       descriptor.name !== "__describe" && authorizeAction(normalized.descriptors, mode, descriptor.name).ok)
       .sort((left, right) =>
-        (mode === "instrument" ? instrumentPriority(left) - instrumentPriority(right) : 0)
+        actionPriority(left) - actionPriority(right)
         || actionCategory(left).localeCompare(actionCategory(right))
         || actionLabel(left).localeCompare(actionLabel(right))
         || left.name.localeCompare(right.name)),
@@ -180,9 +257,21 @@ export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
   );
   const selectedIndex = Math.min(cursor, Math.max(0, actions.length - 1));
   const selected = actions[selectedIndex] ?? null;
+  const categorySummary = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const descriptor of actions) {
+      const category = actionCategory(descriptor);
+      counts.set(category, (counts.get(category) ?? 0) + 1);
+    }
+    return [...counts].map(([category, count]) => `${category} ${count}`).join(" · ");
+  }, [actions]);
   const latest = latestForMode(session.receipts, mode);
+  const latestDescriptor = latest
+    ? normalized.descriptors.find((descriptor) => descriptor.name === latest.action) ?? null
+    : null;
   const managedLatest = latest ? managedReceiptView(latest) : null;
-  const receiptRows = Math.max(0, Math.min(MAX_RECEIPT_ROWS, props.receiptRows ?? 5));
+  const receiptView = managedLatest ?? (latest ? jsonReceiptView(latest.result.summary) : null);
+  const receiptRows = Math.max(0, Math.min(compact ? 2 : MAX_RECEIPT_ROWS, props.receiptRows ?? 5));
   const maxRowOffset = Math.max(0, (latest?.result.rows.length ?? 0) - receiptRows);
   const visibleRowOffset = Math.min(rowOffset, maxRowOffset);
 
@@ -281,9 +370,13 @@ export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
       movePage(1);
       return;
     }
+    if (!key.ctrl && !key.meta && input === "i") {
+      setShowDetails((visible) => !visible);
+      return;
+    }
 
-    if (key.upArrow) setCursor(Math.max(0, selectedIndex - 1));
-    else if (key.downArrow) setCursor(Math.min(Math.max(0, actions.length - 1), selectedIndex + 1));
+    if (key.upArrow) setCursor((current) => Math.max(0, current - 1));
+    else if (key.downArrow) setCursor((current) => Math.min(Math.max(0, actions.length - 1), current + 1));
     else if (key.return && selected && !busy) {
       if (selected.args.length === 0) invoke(selected, []);
       else beginCapture(selected);
@@ -292,9 +385,9 @@ export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
 
   const windowStart = Math.max(
     0,
-    Math.min(selectedIndex - Math.floor(ACTION_VIEW / 2), Math.max(0, actions.length - ACTION_VIEW)),
+    Math.min(selectedIndex - Math.floor(actionView / 2), Math.max(0, actions.length - actionView)),
   );
-  const visible = actions.slice(windowStart, windowStart + ACTION_VIEW);
+  const visible = actions.slice(windowStart, windowStart + actionView);
   const captureArg = capture?.descriptor.args[capture.index];
 
   return (
@@ -302,17 +395,19 @@ export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
       <Box flexDirection="column">
         <Text bold>{props.title}</Text>
         {mode === "instrument" && (
-          <Text dimColor>Create → Inspect → Edit → Stop/Delete · stable IDs</Text>
+          <Text dimColor>Game actions first · tracing and watches are under Managed</Text>
         )}
         <Text dimColor>
-          ↑/↓ action · Enter {busy ? "running…" : "run"} · Esc cancel
-          {props.enablePaging ? " · j/k rows · PgUp/PgDn pages" : ""}
+          ↑/↓ choose · Enter {busy ? "running…" : "run"} · i details
+          {props.enablePaging ? " · j/k result · PgUp/PgDn page" : ""}
         </Text>
-        {actions.length > 0 && <Text dimColor>action {selectedIndex + 1}/{actions.length} · every row is REPL/AI callable</Text>}
+        {actions.length > 0 && (
+          <Text dimColor>{actions.length} actions · {categorySummary} · selected {selectedIndex + 1}</Text>
+        )}
       </Box>
 
-      {session.describe === null && <Text dimColor>describe has not loaded</Text>}
-      {session.describe !== null && actions.length === 0 && <Text dimColor>no actions authorized for {mode}</Text>}
+      {session.describe === null && <Text color="yellow">Loading game actions…</Text>}
+      {session.describe !== null && actions.length === 0 && <Text dimColor>No actions are available here.</Text>}
       {normalized.warnings.length > 0 && (
         <Text color="yellow">{normalized.warnings.length} invalid descriptor(s) hidden</Text>
       )}
@@ -325,38 +420,45 @@ export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
           </Text>
         );
       })}
+      {windowStart + visible.length < actions.length && (
+        <Text dimColor>  ↓ {actions.length - windowStart - visible.length} more actions</Text>
+      )}
 
       {selected && (
         <Box flexDirection="column" borderTop borderStyle="single" borderColor="gray">
           <Text><Text bold>{actionLabel(selected)}</Text><Text dimColor> · {actionCategory(selected)}</Text></Text>
-          <Text><Text bold>signature </Text>{signature(selected)}</Text>
-          <Text>
-            <Text bold>effect </Text>{selected.effect}
-            <Text dimColor> · returns {selected.returns} · {selected.capabilities.join(", ")}</Text>
-          </Text>
-          <Text><Text bold>docs </Text>{selected.doc ? oneLine(selected.doc) : <Text dimColor>none</Text>}</Text>
+          <Text>{selected.doc ? oneLine(selected.doc) : <Text dimColor>No description provided.</Text>}</Text>
+          <Text dimColor>{effectLabel(selected)} · {inputLabel(selected)}</Text>
+          {showDetails ? (
+            <>
+              <Text><Text bold>Technical name </Text>{signature(selected)}</Text>
+              <Text dimColor>
+                effect {selected.effect} · returns {selected.returns} · capabilities {selected.capabilities.join(", ")}
+              </Text>
+            </>
+          ) : <Text dimColor>i → show technical name, types, and capabilities</Text>}
         </Box>
       )}
 
       {capture && captureArg && (
         <Box flexDirection="column" borderStyle="round" borderColor="yellow" paddingX={1}>
           <Text color="yellow">
-            {capture.descriptor.name} · argument {capture.index + 1}/{capture.descriptor.args.length}
+            {actionLabel(capture.descriptor)} · input {capture.index + 1}/{capture.descriptor.args.length}
           </Text>
           <Text>
             {captureArg.name}: {captureArg.type}{captureArg.optional ? " (optional; empty ends capture)" : ""} &gt; {capture.input}
           </Text>
-          <Text dimColor>enter: accept one raw value · escape: cancel all arguments</Text>
+          <Text dimColor>{argumentHint(captureArg.type)} · Enter accepts · Esc cancels</Text>
         </Box>
       )}
 
       <Box flexDirection="column" borderTop borderStyle="single" borderColor="gray">
-        <Text bold>latest {mode} receipt</Text>
-        {!latest && <Text dimColor>none</Text>}
+        <Text bold>Last result</Text>
+        {!latest && <Text dimColor>No action has run yet.</Text>}
         {latest && (
           <>
             <Text color={receiptColor(latest.status)}>
-              {latest.status.toUpperCase()} · {latest.action} · {managedLatest?.headline ?? oneLine(latest.result.summary || "(no summary)")}
+              {latest.status.toUpperCase()} · {latestDescriptor ? actionLabel(latestDescriptor) : latest.action} · {receiptView?.headline ?? oneLine(latest.result.summary || "(no summary)")}
             </Text>
             {latest.error && <Text color="red">{latest.error.code}: {oneLine(latest.error.message)}</Text>}
             {latest.verification && (
@@ -365,9 +467,13 @@ export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
                 {latest.verification.detail ? ` · ${oneLine(latest.verification.detail)}` : ""}
               </Text>
             )}
-            {managedLatest?.detail && <Text>{managedLatest.detail}</Text>}
-            {managedLatest?.config && <Text dimColor>{oneLine(managedLatest.config)}</Text>}
-            {managedLatest?.rows.map((row, index) => <Text key={`managed-${index}`}>{oneLine(row)}</Text>)}
+            {receiptView?.detail && <Text>{receiptView.detail}</Text>}
+            {receiptView?.config && <Text dimColor>{oneLine(receiptView.config)}</Text>}
+            {receiptView?.rows.slice(0, compact ? 2 : receiptView.rows.length)
+              .map((row, index) => <Text key={`view-${index}`}>{oneLine(row, 150)}</Text>)}
+            {compact && receiptView && receiptView.rows.length > 2 && (
+              <Text dimColor>+ {receiptView.rows.length - 2} more result field(s) · widen terminal to show</Text>
+            )}
             {latest.result.rows.slice(visibleRowOffset, visibleRowOffset + receiptRows).map((row, index) => (
               <Text key={visibleRowOffset + index}>{oneLine(row)}</Text>
             ))}
@@ -377,7 +483,7 @@ export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
                 /{latest.result.rows.length}
               </Text>
             )}
-            {props.enablePaging && pageCursor && (
+            {props.enablePaging && pageCursor && (pageCursor.index > 0 || latest.result.nextOffset !== undefined) && (
               <Text dimColor>
                 page offset {pageCursor.offsets[pageCursor.index] ?? 0}
                 {latest.result.nextOffset === undefined ? " · final page" : ` · next ${latest.result.nextOffset}`}
@@ -385,12 +491,12 @@ export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
             )}
           </>
         )}
-        {invokeError && <Text color="red">invocation transport error: {oneLine(invokeError)}</Text>}
+        {invokeError && <Text color="red">Could not run action: {oneLine(invokeError)}</Text>}
       </Box>
     </Box>
   );
 }
 
 export function InstrumentPanel(props: ActionPanelProps): React.JSX.Element {
-  return <ActionPalette {...props} mode="instrument" title="Managed instruments & runtime actions" />;
+  return <ActionPalette {...props} mode="instrument" title="Mods and game controls" />;
 }

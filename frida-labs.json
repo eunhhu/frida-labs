@@ -25,6 +25,33 @@
       "processByPlatform": {
         "darwin": "A Dance of Fire and Ice"
       }
+    },
+    "blockblast": {
+      "process": "com.block.juggle",
+      "mode": "attach",
+      "entry": "agent/targets/blockblast/index.ts",
+      "device": {
+        "kind": "id",
+        "id": "R3CWB0GCWMX"
+      }
+    },
+    "growcastle": {
+      "process": "com.raongames.growcastle",
+      "mode": "attach",
+      "entry": "agent/targets/growcastle/index.ts",
+      "device": {
+        "kind": "id",
+        "id": "R3CWB0GCWMX"
+      }
+    },
+    "battlecatskr": {
+      "process": "jp.co.ponos.battlecatskr",
+      "mode": "attach",
+      "entry": "agent/targets/battlecatskr/index.ts",
+      "device": {
+        "kind": "id",
+        "id": "R3CWB0GCWMX"
+      }
     }
   }
 }

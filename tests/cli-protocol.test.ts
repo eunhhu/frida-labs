@@ -61,6 +61,23 @@ test("boolean flags never consume positional arguments", () => {
   });
 });
 
+test("global and command help are successful and beginner-oriented", async () => {
+  expect(parseCliArgs(["--help"])).toEqual({ command: "help", args: [], flags: {} });
+  expect(parseCliArgs(["probe", "-h"])).toEqual({ command: "probe", args: [], flags: { help: true } });
+
+  const global = capture();
+  expect(await runCli(["--help"], global.io)).toBe(0);
+  expect(global.err).toEqual([]);
+  expect(global.out[0]).toContain("Connect → Mods → Inspect");
+  expect(global.out[0]).toContain("flab <command> --help");
+
+  const command = capture();
+  expect(await runCli(["probe", "--help"], command.io)).toBe(0);
+  expect(command.err).toEqual([]);
+  expect(command.out[0]).toContain("flab probe");
+  expect(command.out[0]).toContain("engine-agnostic");
+});
+
 test("value flags remain order-independent and reject missing values", () => {
   expect(parseCliArgs(["target", "set", "game", "--mode=spawn", "--proc", "Game.exe", "--json"])).toEqual({
     command: "target",

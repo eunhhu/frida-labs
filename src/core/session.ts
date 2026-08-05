@@ -7,6 +7,7 @@ import { getTarget, repoRoot } from "./manifest.js";
 import { compileEntry, watchEntry } from "./compile.js";
 import { enableChildGating, enableSpawnGating, watchLifecycle, type LifecycleEvents } from "./lifecycle.js";
 import { normalizeRpcDescriptors, type RpcDescriptor } from "./actions.js";
+import { resolveAttachTarget } from "./processes.js";
 import {
   describeDevice,
   deviceSelectorLabel,
@@ -316,6 +317,12 @@ async function attach(device: frida.Device, target: string | number): Promise<fr
         `(sudo alone does not bypass it). Non-hardened targets attach as soon as Developer Mode is on.`,
       );
     }
+    if (device.type !== frida.DeviceType.Local && /timed out while waiting for stop from process with PID/i.test(msg)) {
+      throw new Error(
+        `${msg} — the mobile OS may have frozen this background app. Bring the game to the foreground and retry; ` +
+        `if the PID is stale, relaunch the game before attaching again.`,
+      );
+    }
     throw e;
   }
 }
@@ -404,17 +411,41 @@ export async function startSession(opts: SessionOptions, ev: SessionEvents): Pro
     return s;
   };
 
-  const stopManagedInstruments = async (owner: frida.Script | undefined): Promise<void> => {
+  const cleanupAgent = async (owner: frida.Script | undefined): Promise<void> => {
     if (!owner) return;
     try {
-      const fn = (owner.exports as Record<string, unknown>).instrumentStopAll;
-      if (typeof fn !== "function") return;
-      const result = await (fn as () => Promise<unknown>)();
-      if (result && typeof result === "object" && (result as { ok?: unknown }).ok === false) {
-        ev.onError(`[instrument cleanup] ${JSON.stringify(result)}`);
+      const exports = owner.exports as Record<string, unknown>;
+      // Frida's RPC exports object is a Proxy: reading any missing property
+      // still yields a callable stub. Consult the required descriptor first
+      // or targets without instrumentStopAll produce a false cleanup error.
+      const describe = exports.__describe;
+      if (typeof describe !== "function") return;
+      const inventory = await (describe as () => Promise<unknown>)();
+      if (!Array.isArray(inventory)) return;
+      const names = new Set(inventory.flatMap((entry) =>
+        entry !== null && typeof entry === "object" &&
+        typeof (entry as { name?: unknown }).name === "string"
+          ? [(entry as { name: string }).name]
+          : [],
+      ));
+      // Target-specific dispose restores direct patches/window flags/timers;
+      // instrumentStopAll owns the generic trace/watch/freeze registry. Invoke
+      // every advertised cleanup surface because script unload alone cannot
+      // restore process memory or Android window state.
+      for (const name of ["dispose", "instrumentStopAll"] as const) {
+        if (!names.has(name)) continue;
+        try {
+          const result = await (exports[name] as () => Promise<unknown>)();
+          if (result && typeof result === "object" &&
+              ((result as { ok?: unknown }).ok === false || (result as { clean?: unknown }).clean === false)) {
+            ev.onError(`[agent cleanup ${name}] ${JSON.stringify(result)}`);
+          }
+        } catch (error) {
+          ev.onError(`[agent cleanup ${name} failed] ${(error as Error).message}`);
+        }
       }
     } catch (error) {
-      ev.onError(`[instrument cleanup failed] ${(error as Error).message}`);
+      ev.onError(`[agent cleanup discovery failed] ${(error as Error).message}`);
     }
   };
 
@@ -441,15 +472,19 @@ export async function startSession(opts: SessionOptions, ev: SessionEvents): Pro
         if (live.name) proc = live.name;
       } catch { /* retain the stable PID display when lookup is unavailable */ }
     } else {
-      proc = await resolveProcess(device, configured);
       if (wantSpawn) {
+        // Spawn needs the configured executable/bundle id. Do not translate a
+        // mobile application identifier to a localized name or running PID.
+        proc = await resolveProcess(device, configured);
         ev.onLog(`spawning ${proc} …`);
         pid = await device.spawn(proc);
         spawned = true;
         session = await attach(device, pid);
       } else {
+        const resolvedTarget = await resolveAttachTarget(device, configured);
+        proc = resolvedTarget.display;
         ev.onLog(`attaching to ${proc} …`);
-        session = await attach(device, proc);
+        session = await attach(device, resolvedTarget.target);
         pid = session.pid;
       }
     }
@@ -481,12 +516,12 @@ export async function startSession(opts: SessionOptions, ev: SessionEvents): Pro
             try {
               const s = await inject(next);
               if (closed) {
-                await stopManagedInstruments(s);
+                await cleanupAgent(s);
                 try { await s.unload(); } catch { /* */ }
                 return;
               }
               try {
-                await stopManagedInstruments(script);
+                await cleanupAgent(script);
                 await script.unload();
               } catch (e) {
                 // Old script would not die: keep it as the live agent and
@@ -510,7 +545,7 @@ export async function startSession(opts: SessionOptions, ev: SessionEvents): Pro
   } catch (e) {
     // Failure after device-global state was taken: unwind in reverse order.
     stopWatch?.();
-    await stopManagedInstruments(script);
+    await cleanupAgent(script);
     try { await script?.unload(); } catch { /* */ }
     try { await session?.detach(); } catch { /* */ }
     // A process we spawned but never resumed would stay suspended forever —
@@ -574,6 +609,8 @@ export async function startSession(opts: SessionOptions, ev: SessionEvents): Pro
       for (const warning of normalized.warnings) ev.onError(`[descriptor] ${warning}`);
       return normalized.descriptors.map((descriptor): RpcDescriptor => ({
         name: descriptor.name,
+        ...(descriptor.label ? { label: descriptor.label } : {}),
+        ...(descriptor.category ? { category: descriptor.category } : {}),
         args: descriptor.args.map((arg) => ({ ...arg })),
         ...(descriptor.doc ? { doc: descriptor.doc } : {}),
         capabilities: [...descriptor.capabilities],
@@ -590,7 +627,7 @@ export async function startSession(opts: SessionOptions, ev: SessionEvents): Pro
       // touch the session.
       await reloadChain;
       await releaseLifecycle();
-      await stopManagedInstruments(script);
+      await cleanupAgent(script);
       try { await script.unload(); } catch { /* */ }
       if (opts.childGating) { try { await session.disableChildGating(); } catch { /* */ } }
       try { await session.detach(); } catch { /* */ }

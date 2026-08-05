@@ -40,7 +40,10 @@ function booleanLiteral(value: string): boolean | null {
 
 /** Parse long flags without consuming later positional args for booleans. */
 export function parseCliArgs(argv: readonly string[]): ParsedCliArgs {
-  const [command, ...rest] = argv;
+  const normalized = argv[0] === "--help" || argv[0] === "-h"
+    ? ["help", ...argv.slice(1)]
+    : argv;
+  const [command, ...rest] = normalized;
   const flags: Record<string, CliFlagValue> = {};
   const args: string[] = [];
 
@@ -49,6 +52,10 @@ export function parseCliArgs(argv: readonly string[]): ParsedCliArgs {
     if (token === "--") {
       args.push(...rest.slice(index + 1));
       break;
+    }
+    if (token === "-h") {
+      flags.help = true;
+      continue;
     }
     if (!token.startsWith("--")) {
       args.push(token);

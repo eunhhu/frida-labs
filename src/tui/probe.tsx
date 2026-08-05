@@ -16,9 +16,9 @@ const VARIANTS: readonly ProbeVariant[] = [
 ];
 
 const LABELS: Record<ProbeVariant, string> = {
-  "probe-attach-name": "attach name",
-  "probe-attach-pid": "attach PID",
-  "probe-spawn": "spawn",
+  "probe-attach-name": "running app name",
+  "probe-attach-pid": "process ID",
+  "probe-spawn": "launch executable",
 };
 
 function variantAt(index: number): ProbeVariant {
@@ -88,22 +88,28 @@ export function TargetLaunchPanel(props: {
   target: string;
   processOverride?: string;
   device?: DeviceSelector;
+  deviceLabel?: string;
   onLaunch(request: TargetLaunch): void;
   onCancel(): void;
 }): React.JSX.Element {
   const [spawnGating, setSpawnGating] = useState(false);
   const [childGating, setChildGating] = useState(false);
+  const [advanced, setAdvanced] = useState(false);
 
   useInput((input, key) => {
     if (key.escape) {
       props.onCancel();
       return;
     }
-    if (input === "s") {
+    if (input === "a") {
+      setAdvanced((active) => !active);
+      return;
+    }
+    if (advanced && input === "s") {
       setSpawnGating((active) => !active);
       return;
     }
-    if (input === "c") {
+    if (advanced && input === "c") {
       setChildGating((active) => !active);
       return;
     }
@@ -119,18 +125,26 @@ export function TargetLaunchPanel(props: {
   });
 
   return (
-    <Box flexDirection="column" flexGrow={1} paddingX={1}>
-      <Text bold>launch registered target</Text>
-      <Text>target: {props.target}</Text>
-      <Text>process: {props.processOverride ?? "manifest default"}</Text>
-      <Text>device: {props.device ? deviceSelectorLabel(props.device) : "manifest/default"}</Text>
-      <Text color={spawnGating ? "cyan" : undefined}>
-        [{spawnGating ? "x" : " "}] spawn gating (s)
-      </Text>
-      <Text color={childGating ? "cyan" : undefined}>
-        [{childGating ? "x" : " "}] child gating (c)
-      </Text>
-      <Text dimColor>enter launch · escape cancel · unsupported Probe-spawn gating is not offered here</Text>
+    <Box flexDirection="column" flexGrow={1} paddingX={2} paddingY={1}>
+      <Text bold color="cyan">Connect saved game</Text>
+      <Text>Game tools: <Text bold>{props.target}</Text></Text>
+      <Text>Running app: {props.processOverride ?? "use saved process name"}</Text>
+      <Text>Device: {props.deviceLabel ?? (props.device ? deviceSelectorLabel(props.device) : "use saved/default device")}</Text>
+      <Text> </Text>
+      <Text bold color="green">Enter → connect and open Mods</Text>
+      <Text dimColor>Esc → back · a → {advanced ? "hide" : "show"} advanced launch options</Text>
+      {advanced && (
+        <Box flexDirection="column" marginTop={1}>
+          <Text bold color="yellow">Advanced launch options</Text>
+          <Text color={spawnGating ? "cyan" : undefined}>
+            [{spawnGating ? "x" : " "}] Pause newly spawned processes (s)
+          </Text>
+          <Text color={childGating ? "cyan" : undefined}>
+            [{childGating ? "x" : " "}] Follow child processes (c)
+          </Text>
+          <Text dimColor>Most games do not need these. Use them for launchers or child processes.</Text>
+        </Box>
+      )}
     </Box>
   );
 }
@@ -226,8 +240,9 @@ export function ProbePanel(props: ProbePanelProps): React.JSX.Element {
   return (
     <Box flexDirection="column" flexGrow={1} paddingX={1}>
       <Box flexDirection="column">
-        <Text bold>probe</Text>
-        <Text dimColor>←/→ variant · type or enter edit · enter launch · esc clear</Text>
+        <Text bold color="yellow">Manual connect (advanced)</Text>
+        <Text>Use this only when the running-app or saved-game lists cannot identify the target.</Text>
+        <Text dimColor>←/→ method · type value · Enter connect · Esc clear</Text>
       </Box>
       <Text>
         {VARIANTS.map((candidate) => candidate === variant ? `[${LABELS[candidate]}]` : ` ${LABELS[candidate]} `).join(" ")}
@@ -239,7 +254,7 @@ export function ProbePanel(props: ProbePanelProps): React.JSX.Element {
       </Box>
       {variant !== "probe-spawn" && (
         <Text color={childGating ? "cyan" : undefined}>
-          [{childGating ? "x" : " "}] child gating (tab)
+          [{childGating ? "x" : " "}] Follow child processes (Tab)
         </Text>
       )}
       {error && <Text color="red">{error}</Text>}
