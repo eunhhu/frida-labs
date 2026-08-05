@@ -9,8 +9,8 @@ resolved to live PIDs even when Android/Frida exposed a localized app name.
 
 | App | Package | Decision |
 | --- | --- | --- |
-| Block Blast! 10.4.9 | `com.block.juggle` | Offline single-player target built and tested |
-| GrowCastle 1.50.14 | `com.raongames.growcastle` | Local single-player/QoL target built and tested; rankings and purchases excluded |
+| Block Blast! 10.4.9 | `com.block.juggle` | Local score, adventure, no-fail, revive, and guarded board APIs built and tested offline |
+| GrowCastle 1.50.14 | `com.raongames.growcastle` | Local gold, level, skill, battle, wave, and QoL APIs built; rankings and purchases excluded |
 | The Battle Cats KR 15.5.0 | `jp.co.ponos.battlecatskr` | Read-only/local QoL target tested; battle work blocked by the owner's unaccepted 620 MB data download |
 | Clash Royale, Lucky Defense, MilkChoco, PUBG MOBILE, Pokemon GO, Wuthering Waves | — | Excluded: online competitive/co-op/live-service or anti-cheat scope |
 
@@ -22,15 +22,29 @@ modification was attempted.
 
 | Target | Runtime mapping | Reversible controls | Runtime evidence | Cleanup |
 | --- | --- | --- | --- | --- |
-| `blockblast` | Cocos2d-x, `libcocos2djs.so`, 414 shipped HEK traits reviewed | Activity keep-awake, removable EGL FPS meter | 2,040 frame callbacks; 118.94 FPS; window flag changed and restored | Reset, close, and fresh attach clean |
-| `growcastle` | Unity IL2CPP, 78 assemblies, 1,681 `Scripts.dll` classes | Persistent time scale 0.25–3, target FPS 15–240, keep-awake, FPS meter | 1.25 scale survived 18 game writes; 30 FPS survived 336 writes; 29.99 FPS measured | Hooks detached first; original scale/FPS/window restored; fresh attach clean |
+| `blockblast` | Cocos2d-x, Java local storage, live JS trait loader | Score/best score, adventure unlock, no-fail, unlimited revives, guarded classic clear, QoL | score `0/9374→9375`, level `1→2`, four survival traits active `4/4`; adventure board mismatch rejected | Six save keys restored; runtime traits removed; bridge keys cleaned |
+| `growcastle` | Unity IL2CPP, 78 assemblies, 1,681 `Scripts.dll` classes | Gold, player level, skill points, pause, no-cooldown hooks, guarded wave skip, time/FPS/QoL | gold `125→126`, level `2→3`, points `1→2`, pause `false→true`; all read back | All four values restored; listener/replacement cleanup implemented |
 | `battlecatskr` | `libnative-lib.so`, 58 game JNI exports | Keep-awake, EGL FPS meter, removable native touch observer | Safe corner tap fired 2 callbacks; 537 frames; 27.92 FPS | Reset, close, and fresh attach clean |
 
-Block Blast gameplay writes stay disabled because the stripped Cocos module and
-encrypted HEK traits do not provide a proven restorable call path. Battle Cats
-unit/stage/battle/content work stays disabled until the user accepts the data
-download and opens an offline battle scene. These are explicit blockers, not
-claimed coverage.
+Block Blast's Java `JsCallJava.evalString`, `Cocos2dxLocalStorage`, and
+`Trait.dynamicEnableTraitsAsync` paths were recovered from the live build, so
+the earlier HEK-only limitation no longer applies. The classic clear method was
+also resolved, but its first call occurred in an adventure scene and failed on
+the absent classic score proxy without changing the board. The shipped action
+now checks that proxy before mutation. Battle Cats unit/stage/battle/content
+work remains disabled until the owner accepts the 620 MB data download and
+opens an offline battle scene. These remaining blockers are not claimed as
+coverage.
+
+For persistent-write testing, the phone was put in airplane mode with mobile
+data already off. The route was verified absent, values were changed and read
+back, then reset. Airplane mode was disabled and Wi-Fi returned to its original
+enabled state. A secure pattern lock later paused the Cocos runtime before the
+trait-disable RPC could answer; save restoration still completed through the
+Java storage API, and force-stopping the game removed the runtime-only traits.
+Recon-created `flab_*` and `__flab_mod_result_*` database keys were explicitly
+removed. GrowCastle's final active-skill firing check and Block Blast's classic
+clear success path require the owner to unlock the phone and open those scenes.
 
 ## Interface and agent verification
 
@@ -45,7 +59,7 @@ from Connect opens the game-specific target instead of a generic probe.
 The complete first-run path was repeated after this fix: `Ctrl+V` selected the
 phone, Connect listed all three games with saved-target diamonds, Block Blast
 opened a short review screen, the next Enter attached PID 11539, and Mods showed
-11 labeled actions; `Ctrl+Q` then closed the session cleanly.
+the descriptor-driven game actions; `Ctrl+Q` then closed the session cleanly.
 
 All selectors use the same core path:
 
@@ -74,7 +88,7 @@ The final repository gate passed:
 ```text
 bun test                         91 passed, 0 failed
 bun run typecheck               passed
-bun run flab -- depcheck --json 0 violations across 36 files
+bun run flab -- depcheck --json 0 violations across 37 files
 bun tests/tui-mode-harness.ts    all scenarios passed
 bun run test:runtime             27 native attach/session checks passed
 flab build blockblast            passed

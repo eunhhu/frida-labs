@@ -102,6 +102,7 @@ const surface = {
   },
   modHelp(): unknown {
     return [
+      "BLOCKED: accept the in-game 620 MB data download and open an offline battle before gameplay mods can be mapped",
       "QoL: qolKeepAwake(true|false)",
       "Performance: performanceStart(), performanceStatus(), performanceStop()",
       "Input diagnostics: touchMonitorStart(), touchMonitorStatus(), touchMonitorStop()",
@@ -135,9 +136,9 @@ const surface = {
   async dispose(): Promise<unknown> { return resetAll(); },
   __describe(): unknown {
     return [
-      { name: "modInfo", label: "About this mod", category: "System", doc: "Tested build, runtime, safety boundary, and live blocker", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "modHelp", label: "How to use", category: "System", doc: "Action examples and cleanup command", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
-      { name: "modState", label: "Current mod state", category: "System", doc: "Window flag and owned listener state", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
+      { name: "modInfo", label: "About this game mod and blocker", category: "Start here", doc: "Tested build, runtime, safety boundary, and required 620 MB game-data step", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
+      { name: "modHelp", label: "Show current blocker and commands", category: "Start here", doc: "Required gameplay-data step, safe diagnostics, and cleanup", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
+      { name: "modState", label: "Show every active change", category: "Start here", doc: "Window flag and owned listener state", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
       { name: "runtimeRead", label: "Native runtime details", category: "Discovery", doc: "Live module and bounded Battle Cats JNI export inventory", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
       { name: "dataCatalog", label: "Discovered game systems", category: "Discovery", doc: "APK/native evidence and explicit unsupported mutation rows", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
       { name: "qolKeepAwake", label: "Keep screen awake", category: "QoL", args: [{ name: "enabled", type: "boolean" }], doc: "Toggle the game Activity window flag; resetAll restores its original value", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
@@ -147,7 +148,7 @@ const surface = {
       { name: "touchMonitorStart", label: "Start touch monitor", category: "Debug", doc: "Count calls to the game's native appTouch bridge without changing input", capabilities: ["instrument", "debug"], effect: "hook", returns: "verification", statusAction: "touchMonitorStatus" },
       { name: "touchMonitorStatus", label: "Touch monitor status", category: "Debug", doc: "Hook address, event count, and firing verification", capabilities: ["instrument", "analysis", "debug"], effect: "read", returns: "verification" },
       { name: "touchMonitorStop", label: "Stop touch monitor", category: "Debug", doc: "Detach the owned touch listener", capabilities: ["instrument", "debug"], effect: "control", returns: "verification", statusAction: "touchMonitorStatus" },
-      { name: "resetAll", label: "Reset all changes", category: "System", doc: "Detach listeners and restore the Activity window flag", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
+      { name: "resetAll", label: "Reset every reversible change", category: "Start here", doc: "Detach listeners and restore the Activity window flag", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
       { name: "dispose", label: "Dispose mod", category: "Debug", doc: "Cleanup alias used before reload or detach", capabilities: ["instrument", "debug"], effect: "control", returns: "json" },
       { name: "__describe", doc: "This descriptor" },
     ];

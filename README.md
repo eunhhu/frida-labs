@@ -86,7 +86,7 @@ Game: Terraria
 Process: Terraria.exe
 Device: local
 Start mode: attach
-Wanted features: QoL, player, world, and content
+Wanted features: progression, resources, combat, cooldowns, inventory, content, and QoL
 
 This is my authorized offline/single-player instance. Finish the game-specific
 menu, REPL, persistent AI controls, cleanup, reattach, and live verification.
@@ -104,7 +104,7 @@ Invoke the repository skill with the syntax your harness understands:
 For example:
 
 ```sh
-codex '$build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="QoL, player, world"'
+codex '$build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="progression, resources, combat, inventory, content, QoL"'
 ```
 
 The complete copy-paste commands, remote/mobile variants, safety boundary,
@@ -199,6 +199,7 @@ arguments, read/write effect, return type, and capabilities truthfully.
 
 Required target behavior:
 
+- make game-specific progression/combat/resource/content actions the primary menu when callable paths exist; treat FPS and keep-awake as secondary QoL;
 - expose real discovery, status, and cleanup actions;
 - keep mutations off by default and validate ranges;
 - capture original state before writes and restore it on reset/detach;

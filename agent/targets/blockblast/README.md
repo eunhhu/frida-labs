@@ -1,74 +1,97 @@
-# Block Blast! target
+# Block Blast! game mod
 
-Tested against Block Blast! `10.4.9`, package `com.block.juggle`, on Android
-device `R3CWB0GCWMX` (arm64). This target is intentionally fail-closed: the
-shipped game traits are HEK bytecode and `libcocos2djs.so` is stripped, so it
-does not claim unverified score, board, revive, or content writes.
+Tested with Block Blast! `10.4.9` (`com.block.juggle`) on the arm64 Android
+device `R3CWB0GCWMX`. The target uses the game's real Java/Cocos interfaces:
+
+- `JsCallJava.evalString()` for live game JS and shipped traits;
+- `Cocos2dxLocalStorage` for typed score and adventure progress;
+- `Trait.dynamicEnableTraitsAsync()` for no-fail and unlimited revives.
+
+Use only in an authorized offline/single-player session. Rankings, cloud state,
+purchases, ads, and remote values are excluded.
 
 ## Start
 
 ```sh
-# Human menu: press 2 for Mods, 3 for Inspect, ? for help
+# Human menu: Start here → Progress/Content/Gameplay
 bun run flab -- tui blockblast --device R3CWB0GCWMX
 
-# Human command console
+# Human JavaScript REPL
 bun run flab -- run blockblast --device R3CWB0GCWMX --no-watch
 
-# Long-lived AI controller (NDJSON on stdin/stdout)
+# One persistent AI session; send NDJSON on stdin
 bun run flab -- run blockblast --device R3CWB0GCWMX --session --json --no-watch
 
-# Start a stopped app, inject before main, resume, then open the human REPL
+# Start a stopped app, inject before main, then resume
 bun run flab -- run blockblast --device R3CWB0GCWMX --spawn --no-watch
 ```
 
-Use `--device usb`, another exact device id, or `--host host:port` to override
-the saved device. Attach mode requires the app to be running. Block Blast spawn
-mode is also live-verified; runtime detection is lazy so resumed Cocos modules
-appear even though the agent was injected before game initialization.
+Replace the selector with `--device usb`, another exact device id, or
+`--host host:port` for a remote Frida endpoint.
 
-REPL examples:
+## Useful mod flow
 
 ```js
-await modInfo()
-await runtimeRead()
-await featureCatalog()
-await qolKeepAwake(true)
-await performanceStart()
-await performanceStatus()
+await progressRead()
+await scoreSet(50000, true)
+await adventureUnlockThrough(96, true)
+await gameReload()
+await survivalSetEnabled(true)
+await survivalStatus()
 await resetAll()
+await gameReload()
 ```
 
-Persistent-session examples, one object per line:
+The `true` argument is an explicit assertion that the game is fully offline.
+Score/chapter writes are captured and reversible until `resetAll()`. Call
+`gameReload()` after a write or restore when the visible scene must reread the
+save immediately.
+
+`survivalSetEnabled(true)` loads four shipped game traits as one understandable
+mode: classic/adventure no-fail plus unlimited revives. Disable it with
+`survivalSetEnabled(false)` or `resetAll()`.
+
+`classicBoardClearNow(true)` is a one-shot classic-mode action. It first
+requires a live classic score proxy. Adventure scenes are rejected before the
+board mutation because their board model differs.
+
+Persistent AI requests use string arguments:
 
 ```json
-{"id":"describe","op":"describe"}
-{"id":"catalog","op":"action","mode":"analysis","action":"featureCatalog","args":[]}
-{"id":"awake","op":"action","mode":"instrument","action":"qolKeepAwake","args":["true"]}
+{"id":"read","op":"action","mode":"analysis","action":"progressRead","args":[]}
+{"id":"score","op":"action","mode":"instrument","action":"scoreSet","args":["50000","true"]}
+{"id":"unlock","op":"action","mode":"instrument","action":"adventureUnlockThrough","args":["96","true"]}
+{"id":"survive","op":"action","mode":"instrument","action":"survivalSetEnabled","args":["true"]}
+{"id":"state","op":"action","mode":"analysis","action":"modState","args":[]}
 {"id":"reset","op":"action","mode":"instrument","action":"resetAll","args":[]}
 {"id":"close","op":"close"}
 ```
 
-## Coverage and live evidence
+## Game API coverage
 
-| System | Read | Modify/create | Live verification |
+| Feature | Game interface | Reset | Live result |
 | --- | --- | --- | --- |
-| Runtime | Cocos module, process, architecture | No | `libcocos2djs.so` found in PID 29567 |
-| Player/board | 5 shipped trait paths cataloged | No callable path proven | HEK bytecode + stripped exports |
-| Progression | High-score trait cataloged | Intentionally disabled | No score/save write attempted |
-| Visual/content | Skin and chapter traits cataloged | No safe factory path proven | Reported unsupported |
-| QoL | Activity flag and EGL state | Keep-awake toggle | `false → true → reset false` |
-| Performance | EGL frame observation | Removable listener | 2,040 callbacks, 118.94 measured FPS |
+| Current/best score | four typed `class*Score` keys | Yes | `0/9374 → 9375 → 0/9374` |
+| Adventure levels | `chapterNum/lastChapterNum` | Yes | level `1 → 2 → 1`; total `96` read live |
+| No-fail | `NoFailBlockTrait` | Yes | dynamically loaded and `active=true` |
+| Revives | three classic/adventure revive traits | Yes | all three loaded; total active traits `4/4` |
+| Classic board clear | `clearAllBlocksImmediate()` | No | method resolved; adventure proxy absence rejected without changing its board |
+| Runtime | Cocos module + Java/trait bridges | Read-only | `libcocos2djs.so` and exact APIs read from PID 16563 |
+| QoL/performance | Activity flag + EGL observer | Yes | keep-awake and removable frame callbacks verified previously |
 
-All 11 descriptors were exercised through the persistent protocol or TUI.
-Exact-id attach, first-USB attach, explicit endpoint attach, persistent remote
-NDJSON, and a stopped-app spawn/resume were exercised. Spawn PID 11539 exposed
-the resumed `libcocos2djs.so` and a fresh attach was clean.
-Reset, close, and a fresh attach reported `owned=false`, no listener, and
-`clean=true`.
+The score, chapter, and trait cycle ran in one persistent NDJSON attach while
+the phone had no default network route. Every save value was read back, then
+restored. Airplane mode and Wi-Fi were returned to their original settings.
+When the secure lock screen paused Cocos before trait cleanup, the process was
+force-stopped after save restoration; that removed all runtime-only traits.
 
-## Cleanup and limits
+## Safety and limits
 
-Always call `resetAll()` before `.exit`, hot reload, or an AI `close` request.
-The target also calls the same cleanup from `dispose()`. No premium, remote,
-advertising, or online state is modified. Gameplay writes stay unavailable
-until a callable runtime path is proven and restored safely.
+- Block Blast has score/chapter/board systems rather than gold or item
+  cooldowns, so its menu follows those game-specific systems.
+- The classic board-clear success path still needs an unlocked classic board;
+  the tested adventure mismatch is now a preflight rejection.
+- `resetAll()` removes temporary bridge keys, restores captured save values,
+  disables owned traits, and resets window/listener state. Keep the game
+  foregrounded while resetting so Cocos can answer.
+- The agent exposes fixed mod operations, not arbitrary game-JS evaluation.

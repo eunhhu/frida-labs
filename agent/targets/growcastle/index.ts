@@ -19,6 +19,14 @@ let targetFrameRateLock: number | null = null;
 let targetFrameRateListener: InvocationListener | null = null;
 let targetFrameRateAddress: string | null = null;
 let targetFrameRateInterceptedWrites = 0;
+let originalGold: string | null = null;
+let originalPlayerLevel: number | null = null;
+let originalSkillPoints: number | null = null;
+let originalPause: boolean | null = null;
+let cooldownEnabled = false;
+let cooldownFires = 0;
+let lastCooldownFires = 0;
+let cooldownMethods: Il2Cpp.Method[] = [];
 
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -36,6 +44,46 @@ function scriptsAssembly(): Il2Cpp.Assembly {
     if (assembly) return assembly;
   }
   throw new Error("GrowCastle scripts assembly is not loaded");
+}
+
+function scriptsClass(fullName: string): Il2Cpp.Class {
+  const klass = scriptsAssembly().image.classes.find((candidate) => candidate.fullName === fullName);
+  if (!klass) throw new Error(`class not found: ${fullName}`);
+  return klass;
+}
+
+function boundedInteger(value: number, name: string, minimum: number, maximum: number): number {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < minimum || parsed > maximum) {
+    throw new Error(`${name} must be an integer between ${minimum} and ${maximum}`);
+  }
+  return parsed;
+}
+
+function cooldownState(): unknown {
+  const fired = cooldownEnabled ? cooldownFires : lastCooldownFires;
+  return {
+    enabled: cooldownEnabled,
+    fired,
+    verified: fired > 0,
+    state: fired > 0 ? "verified" : "unverified",
+    hooks: cooldownMethods.map((method) => `${method.class.fullName}::${method.name}`),
+  };
+}
+
+function stopCooldownHooks(): string[] {
+  const errors: string[] = [];
+  lastCooldownFires = cooldownFires;
+  for (const method of cooldownMethods) {
+    try { Interceptor.revert(method.virtualAddress); } catch (error) {
+      errors.push(`${method.class.fullName}::${method.name}: ${errorText(error)}`);
+    }
+  }
+  try { Interceptor.flush(); } catch (error) { errors.push(`flush: ${errorText(error)}`); }
+  cooldownMethods = [];
+  cooldownEnabled = false;
+  cooldownFires = 0;
+  return errors;
 }
 
 function targetFpsLockState(): unknown {
@@ -120,26 +168,210 @@ async function activityState(): Promise<unknown> {
   }
 }
 
+async function progressState(): Promise<unknown> {
+  return perform(() => {
+    const inventory = scriptsClass("Inventory");
+    const player = scriptsClass("Player");
+    const gameMap = scriptsClass("GameMap");
+    const gameManager = scriptsClass("GameManager");
+    return {
+      gold: inventory.method<Int64>("get_Gold", 0).invoke().toString(),
+      playerLevel: Number(player.method<number>("get_Level", 0).invoke()),
+      skillPoints: Number(player.method<number>("get_SkillPoint", 0).invoke()),
+      playerWave: Number(player.method<number>("get_Wave", 0).invoke()),
+      battle: {
+        active: Boolean(gameMap.field<boolean>("IsBattle").value),
+        waveMode: Boolean(gameMap.method<boolean>("get_IsWaveMode", 0).invoke()),
+        currentWave: gameMap.method<Int64>("get_CurrentWave", 0).invoke().toString(),
+        queuedSkip: Number(gameMap.method<number>("get_SkippingWave", 0).invoke()),
+      },
+      paused: Boolean(gameManager.method<boolean>("get_Pause", 0).invoke()),
+      captured: {
+        gold: originalGold,
+        playerLevel: originalPlayerLevel,
+        skillPoints: originalSkillPoints,
+        pause: originalPause,
+      },
+      noCooldown: cooldownState(),
+    };
+  });
+}
+
+async function setGold(value: number): Promise<unknown> {
+  const amount = boundedInteger(value, "gold", 0, 1_000_000_000_000);
+  return perform(() => {
+    const inventory = scriptsClass("Inventory");
+    const getter = inventory.method<Int64>("get_Gold", 0);
+    const setter = inventory.method<void>("set_Gold", 1);
+    const before = getter.invoke().toString();
+    if (originalGold === null) originalGold = before;
+    setter.invoke(int64(amount));
+    return { before, gold: getter.invoke().toString(), original: originalGold, reversible: true };
+  });
+}
+
+async function setPlayerLevel(value: number): Promise<unknown> {
+  const level = boundedInteger(value, "level", 1, 10_000);
+  return perform(() => {
+    const player = scriptsClass("Player");
+    const getter = player.method<number>("get_Level", 0);
+    const setter = player.method<void>("set_Level", 1);
+    const before = Number(getter.invoke());
+    if (originalPlayerLevel === null) originalPlayerLevel = before;
+    setter.invoke(level);
+    return { before, playerLevel: Number(getter.invoke()), original: originalPlayerLevel, reversible: true };
+  });
+}
+
+async function setSkillPoints(value: number): Promise<unknown> {
+  const points = boundedInteger(value, "points", 0, 100_000);
+  return perform(() => {
+    const player = scriptsClass("Player");
+    const getter = player.method<number>("get_SkillPoint", 0);
+    const setter = player.method<void>("set_SkillPoint", 1);
+    const before = Number(getter.invoke());
+    if (originalSkillPoints === null) originalSkillPoints = before;
+    setter.invoke(points);
+    return { before, skillPoints: Number(getter.invoke()), original: originalSkillPoints, reversible: true };
+  });
+}
+
+async function setPause(enabled: boolean): Promise<unknown> {
+  return perform(() => {
+    const gameManager = scriptsClass("GameManager");
+    const getter = gameManager.method<boolean>("get_Pause", 0);
+    const setter = gameManager.method<void>("set_Pause", 1);
+    const before = Boolean(getter.invoke());
+    if (originalPause === null) originalPause = before;
+    setter.invoke(Boolean(enabled));
+    return { before, paused: Boolean(getter.invoke()), original: originalPause, reversible: true };
+  });
+}
+
+async function setNoCooldown(enabled: boolean): Promise<unknown> {
+  if (!enabled) {
+    const errors = stopCooldownHooks();
+    return { ...cooldownState() as object, restored: errors.length === 0, errors };
+  }
+  return perform(() => {
+    if (cooldownEnabled) return cooldownState();
+    const specs = [
+      ["SpellUpdater", "ReduceActiveSkillCooldown"],
+      ["SpellUpdater", "ReduceAutoSkillCooldown"],
+      ["UIInfiniteSkillButton", "ReduceCooldown"],
+    ] as const;
+    const installed: Il2Cpp.Method[] = [];
+    try {
+      for (const [className, methodName] of specs) {
+        const method = scriptsClass(className).method(methodName, 1);
+        method.implementation = function (
+          this: Il2Cpp.Class | Il2Cpp.Object | Il2Cpp.ValueType,
+          ...args: unknown[]
+        ): Il2Cpp.Method.ReturnType {
+          cooldownFires += 1;
+          const forwarded = [...args];
+          if (cooldownEnabled) forwarded[0] = 86_400;
+          return this.method(method.name, 1).invoke(...(forwarded as Il2Cpp.Parameter.Type[]));
+        };
+        installed.push(method);
+      }
+      cooldownMethods = installed;
+      cooldownEnabled = true;
+      cooldownFires = 0;
+      lastCooldownFires = 0;
+      return cooldownState();
+    } catch (error) {
+      for (const method of installed) {
+        try { Interceptor.revert(method.virtualAddress); } catch { /* best effort rollback */ }
+      }
+      try { Interceptor.flush(); } catch { /* no pending replacements */ }
+      throw error;
+    }
+  });
+}
+
+async function waveState(): Promise<unknown> {
+  return perform(() => {
+    const gameMap = scriptsClass("GameMap");
+    return {
+      active: Boolean(gameMap.field<boolean>("IsBattle").value),
+      waveMode: Boolean(gameMap.method<boolean>("get_IsWaveMode", 0).invoke()),
+      currentWave: gameMap.method<Int64>("get_CurrentWave", 0).invoke().toString(),
+      queuedSkip: Number(gameMap.method<number>("get_SkippingWave", 0).invoke()),
+    };
+  });
+}
+
+async function skipWaves(count: number, offlineConfirmed: boolean): Promise<unknown> {
+  const waves = boundedInteger(count, "count", 1, 20);
+  if (offlineConfirmed !== true) {
+    throw new Error("offlineConfirmed must be true; wave progress must never be used with rankings or cloud sync");
+  }
+  return perform(() => {
+    const gameMap = scriptsClass("GameMap");
+    const active = Boolean(gameMap.field<boolean>("IsBattle").value);
+    const waveMode = Boolean(gameMap.method<boolean>("get_IsWaveMode", 0).invoke());
+    if (!active || !waveMode) throw new Error("start a normal wave battle before using waveSkip");
+    const before = {
+      currentWave: gameMap.method<Int64>("get_CurrentWave", 0).invoke().toString(),
+      queuedSkip: Number(gameMap.method<number>("get_SkippingWave", 0).invoke()),
+    };
+    // Use the game's own local skip path without crystals, bonus bosses, or
+    // monster-stat changes. The battle itself owns reward/UI reconciliation.
+    gameMap.method<void>("AddSkip", 6).invoke(waves, false, 0, true, false, 0);
+    return {
+      before,
+      currentWave: gameMap.method<Int64>("get_CurrentWave", 0).invoke().toString(),
+      queuedSkip: Number(gameMap.method<number>("get_SkippingWave", 0).invoke()),
+      requested: waves,
+      reversible: false,
+      warning: "Current-battle progression cannot be undone by resetAll",
+    };
+  });
+}
+
 async function resetAll(): Promise<unknown> {
   const restoreTimeScale = originalTimeScale;
   const restoreTargetFrameRate = originalTargetFrameRate;
+  const restoreGold = originalGold;
+  const restorePlayerLevel = originalPlayerLevel;
+  const restoreSkillPoints = originalSkillPoints;
+  const restorePause = originalPause;
+  const hadCooldownHooks = cooldownEnabled || cooldownMethods.length > 0;
   // Detach first so restoration cannot be clamped by our own hooks. This also
   // guarantees listener cleanup even if the IL2CPP scheduler is unavailable.
   stopTimeScaleLock();
   stopTargetFpsLock();
+  const cooldownErrors = stopCooldownHooks();
   const performance = frameMeter.reset();
-  const errors: string[] = [];
+  const errors = cooldownErrors.map((error) => `noCooldown: ${error}`);
   let unity: unknown = {
     timeScale: restoreTimeScale,
     targetFrameRate: restoreTargetFrameRate,
     restored: restoreTimeScale === null && restoreTargetFrameRate === null,
   };
-  if (restoreTimeScale !== null || restoreTargetFrameRate !== null) {
+  let progression: unknown = {
+    gold: restoreGold,
+    playerLevel: restorePlayerLevel,
+    skillPoints: restoreSkillPoints,
+    pause: restorePause,
+    restored: restoreGold === null && restorePlayerLevel === null && restoreSkillPoints === null && restorePause === null,
+  };
+  const needsIl2CppRestore = restoreTimeScale !== null
+    || restoreTargetFrameRate !== null
+    || restoreGold !== null
+    || restorePlayerLevel !== null
+    || restoreSkillPoints !== null
+    || restorePause !== null;
+  if (needsIl2CppRestore) {
     try {
-      unity = await perform(() => {
+      const restored = await perform(() => {
         const core = Il2Cpp.domain.assembly("UnityEngine.CoreModule").image;
         const time = core.class("UnityEngine.Time");
         const application = core.class("UnityEngine.Application");
+        const inventory = scriptsClass("Inventory");
+        const player = scriptsClass("Player");
+        const gameManager = scriptsClass("GameManager");
         const restoreErrors: string[] = [];
         if (restoreTimeScale !== null) {
           try {
@@ -157,17 +389,67 @@ async function resetAll(): Promise<unknown> {
             restoreErrors.push(`targetFrameRate: ${errorText(error)}`);
           }
         }
+        if (restoreGold !== null) {
+          try {
+            inventory.method<void>("set_Gold", 1).invoke(int64(restoreGold));
+            originalGold = null;
+          } catch (error) {
+            restoreErrors.push(`gold: ${errorText(error)}`);
+          }
+        }
+        if (restorePlayerLevel !== null) {
+          try {
+            player.method<void>("set_Level", 1).invoke(restorePlayerLevel);
+            originalPlayerLevel = null;
+          } catch (error) {
+            restoreErrors.push(`playerLevel: ${errorText(error)}`);
+          }
+        }
+        if (restoreSkillPoints !== null) {
+          try {
+            player.method<void>("set_SkillPoint", 1).invoke(restoreSkillPoints);
+            originalSkillPoints = null;
+          } catch (error) {
+            restoreErrors.push(`skillPoints: ${errorText(error)}`);
+          }
+        }
+        if (restorePause !== null) {
+          try {
+            gameManager.method<void>("set_Pause", 1).invoke(restorePause);
+            originalPause = null;
+          } catch (error) {
+            restoreErrors.push(`pause: ${errorText(error)}`);
+          }
+        }
         return {
-          timeScale: restoreTimeScale,
-          targetFrameRate: restoreTargetFrameRate,
-          restored: restoreErrors.length === 0,
+          unity: {
+            timeScale: restoreTimeScale,
+            targetFrameRate: restoreTargetFrameRate,
+            restored: !restoreErrors.some((message) => message.startsWith("timeScale:") || message.startsWith("targetFrameRate:")),
+          },
+          progression: {
+            gold: restoreGold,
+            playerLevel: restorePlayerLevel,
+            skillPoints: restoreSkillPoints,
+            pause: restorePause,
+            restored: !restoreErrors.some((message) => /^(gold|playerLevel|skillPoints|pause):/.test(message)),
+          },
           errors: restoreErrors,
         };
       });
-      errors.push(...((unity as { errors?: string[] }).errors ?? []));
+      unity = restored.unity;
+      progression = restored.progression;
+      errors.push(...restored.errors);
     } catch (error) {
-      errors.push(`unity: ${errorText(error)}`);
+      errors.push(`runtime: ${errorText(error)}`);
       unity = { timeScale: restoreTimeScale, targetFrameRate: restoreTargetFrameRate, restored: false };
+      progression = {
+        gold: restoreGold,
+        playerLevel: restorePlayerLevel,
+        skillPoints: restoreSkillPoints,
+        pause: restorePause,
+        restored: false,
+      };
     }
   }
   let activity: unknown;
@@ -178,7 +460,15 @@ async function resetAll(): Promise<unknown> {
     errors.push(`activity: ${message}`);
     activity = { error: message };
   }
-  return { unity, performance, activity, clean: errors.length === 0, errors };
+  return {
+    progression,
+    noCooldown: { restored: cooldownErrors.length === 0, wasEnabled: hadCooldownHooks, errors: cooldownErrors },
+    unity,
+    performance,
+    activity,
+    clean: errors.length === 0,
+    errors,
+  };
 }
 
 const surface = {
@@ -190,20 +480,35 @@ const surface = {
       device: "R3CWB0GCWMX",
       runtime: "Unity IL2CPP / libil2cpp.so",
       scriptsAssembly: "Scripts.dll",
-      safety: "Single-player runtime and reversible QoL only; no rankings, purchases, ads, or remote state.",
+      safety: "Authorized offline/single-player runtime only; no rankings, cloud sync, purchases, ads, crystals, or remote state.",
     };
   },
   modHelp(): unknown {
     return [
-      "Game speed: timeSetScale(0.25..3), timeRead()",
-      "Rendering: qolSetTargetFps(15..240), performanceStart()",
+      "Progress: progressRead(), inventorySetGold(value), progressSetPlayerLevel(value), progressSetSkillPoints(value)",
+      "Battle: battleSetPause(true|false), skillsSetNoCooldown(true|false), waveSkip(count, true) while fully offline",
+      "World speed: timeSetScale(0.25..3), timeRead()",
       "Discovery: gameCatalog(), classSearch(name), methodSearch(name), classDescribe(fullName)",
-      "Cleanup: resetAll() restores captured values and listeners",
+      "Cleanup: resetAll() restores captured values and hooks; waveSkip is the explicit one-shot exception",
     ];
   },
   async modState(): Promise<unknown> {
-    return { unity: await unityState(), activity: await activityState(), performance: frameMeter.status() };
+    return {
+      progression: await progressState(),
+      unity: await unityState(),
+      activity: await activityState(),
+      performance: frameMeter.status(),
+    };
   },
+  progressRead: progressState,
+  inventorySetGold: setGold,
+  progressSetPlayerLevel: setPlayerLevel,
+  progressSetSkillPoints: setSkillPoints,
+  battleSetPause: setPause,
+  skillsSetNoCooldown: setNoCooldown,
+  skillsCooldownStatus: cooldownState,
+  waveState,
+  waveSkip: skipWaves,
   async assemblies(): Promise<unknown> {
     return perform(() => Il2Cpp.domain.assemblies.slice(0, 200).map((assembly) => ({
       name: assembly.name,
@@ -332,9 +637,18 @@ const surface = {
   async dispose(): Promise<unknown> { return resetAll(); },
   __describe(): unknown {
     return [
-      { name: "modInfo", label: "About this mod", category: "System", doc: "Tested build, runtime, and safety boundary", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "modHelp", label: "How to use", category: "System", doc: "Action examples and reset command", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
-      { name: "modState", label: "Current mod state", category: "System", doc: "Unity values, window flag, and frame meter", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
+      { name: "modInfo", label: "About this game mod", category: "Start here", doc: "Tested build, runtime, and offline-only safety boundary", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
+      { name: "modHelp", label: "Show the 5-step quick guide", category: "Start here", doc: "Progress, battle, skill, discovery, and reset commands", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
+      { name: "modState", label: "Show every active change", category: "Start here", doc: "Progress, battle, hooks, Unity values, and cleanup captures", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
+      { name: "progressRead", label: "Read gold and progress", category: "Progress", doc: "Read local gold, player level, skill points, wave, battle, and captured reset values", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
+      { name: "inventorySetGold", label: "Set local gold", category: "Inventory", args: [{ name: "gold", type: "integer" }], doc: "Set 0..1,000,000,000,000 local gold through Inventory.set_Gold; resetAll restores the first captured value", capabilities: ["instrument"], effect: "write", returns: "json", statusAction: "progressRead" },
+      { name: "progressSetPlayerLevel", label: "Set player level", category: "Progress", args: [{ name: "level", type: "integer" }], doc: "Set local player level from 1..10,000 through Player.set_Level; resetAll restores it", capabilities: ["instrument"], effect: "write", returns: "json", statusAction: "progressRead" },
+      { name: "progressSetSkillPoints", label: "Set skill points", category: "Progress", args: [{ name: "points", type: "integer" }], doc: "Set 0..100,000 local skill points through Player.set_SkillPoint; resetAll restores them", capabilities: ["instrument"], effect: "write", returns: "json", statusAction: "progressRead" },
+      { name: "battleSetPause", label: "Pause battle", category: "Battle", args: [{ name: "enabled", type: "boolean" }], doc: "Pause or resume the local battle through GameManager; resetAll restores the first state", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "progressRead" },
+      { name: "skillsSetNoCooldown", label: "Unlimited skill use", category: "Skills", args: [{ name: "enabled", type: "boolean" }], doc: "Accelerate active, auto, and infinite-skill cooldown reducers; status counts live hook firings", capabilities: ["instrument"], effect: "hook", returns: "verification", statusAction: "skillsCooldownStatus" },
+      { name: "skillsCooldownStatus", label: "Skill hook status", category: "Skills", doc: "Show installed cooldown hooks and live firing count", capabilities: ["instrument", "analysis"], effect: "read", returns: "verification" },
+      { name: "waveState", label: "Read wave battle", category: "Battle", doc: "Read active wave battle and queued skip state", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
+      { name: "waveSkip", label: "Skip current waves", category: "Battle", args: [{ name: "count", type: "integer" }, { name: "offlineConfirmed", type: "boolean" }], doc: "Queue 1..20 waves through GameMap.AddSkip without crystals; requires active normal battle and explicit offline confirmation; one-shot and not resettable", capabilities: ["instrument"], effect: "write", returns: "json", statusAction: "waveState" },
       { name: "assemblies", label: "Loaded assemblies", category: "Discovery", doc: "Bounded IL2CPP assembly and class counts", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
       { name: "gameCatalog", label: "Map game systems", category: "Discovery", doc: "Group live Scripts.dll classes by game subsystem", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
       { name: "classSearch", label: "Find game classes", category: "Discovery", args: [{ name: "query", type: "string" }], doc: "Case-insensitive bounded class search in Scripts.dll", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
@@ -347,7 +661,7 @@ const surface = {
       { name: "performanceStart", label: "Start FPS meter", category: "QoL", doc: "Observe EGL frames without changing rendering", capabilities: ["instrument"], effect: "hook", returns: "verification", statusAction: "performanceStatus" },
       { name: "performanceStatus", label: "FPS meter status", category: "QoL", doc: "Frame count, measured FPS, and firing verification", capabilities: ["instrument", "analysis"], effect: "read", returns: "verification" },
       { name: "performanceStop", label: "Stop FPS meter", category: "QoL", doc: "Detach the owned EGL listener", capabilities: ["instrument"], effect: "control", returns: "verification", statusAction: "performanceStatus" },
-      { name: "resetAll", label: "Reset all changes", category: "System", doc: "Restore Unity values/window flags and detach listeners", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
+      { name: "resetAll", label: "Reset every reversible change", category: "Start here", doc: "Restore gold, level, skill points, pause, Unity/window values, and detach every owned hook/listener", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
       { name: "dispose", label: "Dispose mod", category: "Debug", doc: "Cleanup alias used before reload or detach", capabilities: ["instrument", "debug"], effect: "control", returns: "json" },
       { name: "__describe", doc: "This descriptor" },
     ];
@@ -355,4 +669,4 @@ const surface = {
 };
 
 rpc.exports = surface;
-ok("[growcastle] IL2CPP discovery and reversible QoL target ready");
+ok("[growcastle] real game APIs ready: gold, level, skills, pause, cooldown, waves");

@@ -18,7 +18,7 @@ Game: <title>
 Process: <name, bundle id, or positive PID>
 Device: <local, usb, remote, exact id, or host:port>
 Start mode: <attach or spawn>
-Wanted features: <QoL, player, world, inventory, content, ...>
+Wanted features: <completion/progression, resources, combat, cooldowns, inventory, content, QoL, ...>
 ```
 
 Also state that this is your authorized offline/single-player instance and ask
@@ -63,8 +63,8 @@ Replace every value in braces:
 ```text
 Build a verified game-specific mod for GAME={game title}, PROCESS={process name,
 bundle id, or positive PID}, DEVICE={local|usb|remote|device id|host:port},
-MODE={attach|spawn}. Desired priorities: {player/world/inventory/entities/content/
-QoL/debug features}. Use only my authorized offline or single-player instance.
+MODE={attach|spawn}. Desired priorities: {completion/progression/resources/combat/
+cooldowns/inventory/entities/content/QoL features}. Use only my authorized offline or single-player instance.
 Follow docs/agent-game-mod-guide.md and the build-game-mod skill. Do not stop at
 recon or scaffolding: implement the descriptor-driven TUI menu, REPL, and AI
 session surface; exercise every shipped action against the live target; restore
@@ -269,6 +269,14 @@ and `live-verified` evidence. “All game elements” means a complete catalog o
 what the live build exposes plus explicit unsupported rows. It does not mean
 inventing offsets, claiming hidden coverage, or shipping unsafe writes.
 
+Prioritize controls that change the game's core loop: level/progression caps,
+stage or wave advancement, local score/resources, health/damage, skill or item
+cooldowns, inventory/equipment, spawns, and game-specific content systems.
+Frame-rate meters, keep-awake, and generic discovery are supporting tools, not
+a completed mod menu when callable gameplay functions or state were found.
+Do not force the same feature list onto every title: map each requested outcome
+to that game's actual functions, fields, proxies, factories, or save schema.
+
 Use existing engine libraries instead of rebuilding them in the target:
 
 - Unreal: `agent/lib/ue/`
@@ -427,6 +435,7 @@ Do not hard-code `ins-1`; consume the id returned by `instrumentStart`.
 - [ ] Recon covers every subsystem category or marks it unsupported.
 - [ ] Target registered and imports only from `agent/lib/`.
 - [ ] `modInfo`, `modHelp`, `modState`, and cleanup are real, not stubs.
+- [ ] Core gameplay/progression actions dominate the menu; generic FPS/QoL is secondary.
 - [ ] Every callable has truthful descriptor metadata.
 - [ ] TUI presents a readable game-specific menu.
 - [ ] REPL discovery and calls work.
