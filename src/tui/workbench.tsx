@@ -4,7 +4,7 @@
 // core, never around it.
 
 import React from "react";
-import { Box, Text } from "ink";
+import { Box, Text, useWindowSize } from "ink";
 import {
   ActionService,
   resolveLaunchRequest,
@@ -338,6 +338,7 @@ function windowAround<T>(items: readonly T[], cursor: number, size: number): Arr
 
 /** Left column: one connect flow, with sessions shown only after they exist. */
 export function Sidebar(props: {
+  expanded?: boolean;
   deviceLabel: string;
   deviceCount: number;
   processes: ProcessCandidate[];
@@ -353,18 +354,29 @@ export function Sidebar(props: {
   activeId: number | null;
   focus: "processes" | "targets" | "sessions" | null;
 }): React.JSX.Element {
+  const windowSize = useWindowSize();
+  const minimal = Boolean(props.expanded && windowSize.rows < 28);
+  const listSize = minimal ? 2 : 6;
   const selectedProcess = props.processes[props.processIndex];
   const matchedTarget = selectedProcess?.matchedTargets[0];
   const multipleMatches = (selectedProcess?.matchedTargets.length ?? 0) > 1;
   const showConnectLists = props.sessions.length === 0 || props.focus === "processes" || props.focus === "targets";
   return (
-    <Box flexDirection="column" width={36} flexShrink={0} borderStyle="round" borderColor="gray" paddingX={1}>
+    <Box
+      flexDirection="column"
+      width={props.expanded ? undefined : 36}
+      flexGrow={props.expanded ? 1 : 0}
+      flexShrink={0}
+      borderStyle="round"
+      borderColor="gray"
+      paddingX={1}
+    >
       <Text bold color="cyan">{props.sessions.length ? "CONNECTION" : "1. CONNECT"}</Text>
       <Text>Device: {clip(props.deviceLabel, 24)}</Text>
       <Text dimColor>Ctrl+V device ({props.deviceCount} found)</Text>
       {props.sessions.length > 0 && (
         <>
-          <Text> </Text>
+          {!minimal && <Text> </Text>}
           <Text bold underline>connections ({props.sessions.length}/{MAX_SESSIONS})</Text>
           {props.sessions.map((s) => (
             <Text key={s.id} color={s.id === props.activeId ? statusTint[s.status] : "gray"}>
@@ -376,7 +388,7 @@ export function Sidebar(props: {
       )}
       {showConnectLists && (
         <>
-          <Text> </Text>
+          {!minimal && <Text> </Text>}
           <Text bold underline>running apps · {props.processTotal} found</Text>
           {(props.processFilterActive || props.processQuery) && (
             <Text color={props.processFilterActive ? "yellow" : "gray"}>
@@ -391,7 +403,7 @@ export function Sidebar(props: {
           {!props.processesLoading && !props.processesError && props.processes.length === 0 && (!props.processFilterActive || props.processQuery) && (
             <Text color="yellow">no matching running app</Text>
           )}
-          {windowAround(props.processes, props.processIndex, 6).map(({ item, index }) => (
+          {windowAround(props.processes, props.processIndex, listSize).map(({ item, index }) => (
             <Text key={`${item.pid}-${item.name}`} color={props.focus === "processes" && index === props.processIndex ? "cyan" : undefined}>
               {props.focus === "processes" && index === props.processIndex ? "❯ " : "  "}
               {item.matchedTargets.length ? "◆ " : "· "}{clip(item.name, 18)} <Text dimColor>PID {item.pid}</Text>
@@ -405,10 +417,10 @@ export function Sidebar(props: {
               : props.processFilterActive ? "Esc shows every process" : "/ starts search"}
           </Text>
           <Text dimColor>{selectedProcess ? "Enter connect · n save · r refresh" : "Tab saved games · r refresh"}</Text>
-          <Text> </Text>
-          <Text bold underline>saved games</Text>
+          {!minimal && <Text> </Text>}
+          <Text bold underline>saved games · {props.targets.length} found</Text>
           {props.targets.length === 0 && <Text color="yellow">none yet — n creates one</Text>}
-          {windowAround(props.targets, props.pickerIndex, 6).map(({ item: t, index: i }) => (
+          {windowAround(props.targets, props.pickerIndex, listSize).map(({ item: t, index: i }) => (
             <Text key={t} color={props.focus === "targets" && i === props.pickerIndex ? "green" : undefined}>
               {props.focus === "targets" && i === props.pickerIndex ? "❯ " : "  "}{clip(t, 29)}
             </Text>
@@ -459,7 +471,7 @@ export function StatusHeader(props: { session: SessionState | null; deviceLabel:
         <Text bold>flab · {heading}  </Text>
         {s ? (
           <Text color={statusTint[s.status]}>
-            #{s.id} {clip(s.target, 22)}{s.process ? ` (${clip(s.process, 22)})` : ""}{s.pid ? ` pid ${s.pid}` : ""} — {s.status}
+            #{s.id} {clip(s.target, 22)}{s.process ? ` (${clip(s.process, 34)})` : ""}{s.pid ? ` pid ${s.pid}` : ""} — {s.status}
             {` · ${clip(s.device?.id ?? s.deviceLabel, 18)}`}
             {s.describe ? ` · ${s.describe.length} actions` : ""}
             {s.crashes.length ? ` · ${s.crashes.length} crash(es)` : ""}{s.frozen ? " · FROZEN" : ""}
@@ -468,7 +480,7 @@ export function StatusHeader(props: { session: SessionState | null; deviceLabel:
       </Box>
       <Text dimColor>
         {s
-          ? "Next: 2 Mods controls the game · 3 Inspect reads structure · Ctrl+P all tools · ? help"
+          ? "Next: press 2 for Mods · press 3 for Inspect · Ctrl+P all tools · ? help"
           : "Type to search · ↑/↓ choose · Enter connect · Ctrl+V device · ? help"}
       </Text>
       {s && s.detail && (

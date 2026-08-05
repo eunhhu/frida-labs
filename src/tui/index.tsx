@@ -203,7 +203,10 @@ export function App({
 }): React.JSX.Element {
   const { exit } = useApp();
   const windowSize = useWindowSize();
-  const compact = windowSize.columns < 100 || windowSize.rows < 28;
+  // Switch before content starts wrapping/cropping, not only after the pane is
+  // already too small. Keep this aligned with ActionPalette's compact budget.
+  const compact = windowSize.columns < 110 || windowSize.rows < 36;
+  const minimal = windowSize.columns < 90 || windowSize.rows < 28;
   useSyncExternalStore(store.subscribe, store.getVersion);
   const state = store.snapshot;
   const [targetVersion, setTargetVersion] = React.useState(0);
@@ -453,6 +456,38 @@ export function App({
       }
       return;
     }
+    // The journey bar presents 1/2/3 as direct destinations. Keep these as
+    // real shortcuts (outside text inputs/REPL/forms) so the visible model and
+    // keyboard behavior agree.
+    if (ch === "1") {
+      setMode("project");
+      setNotice("Connect — choose a running app or saved game, then press Enter");
+      setFocus("processes");
+      return;
+    }
+    if (ch === "2") {
+      if (!active) {
+        setNotice("Connect to a game before opening Mods");
+        setFocus("processes");
+        return;
+      }
+      setMode("instrument");
+      setSurface("actions");
+      setNotice(null);
+      setFocus("panel");
+      return;
+    }
+    if (ch === "3") {
+      if (!active) {
+        setNotice("Connect to a game before opening Inspect");
+        setFocus("processes");
+        return;
+      }
+      setMode("analysis");
+      setNotice(null);
+      setFocus("panel");
+      return;
+    }
     if (key.ctrl && ch === "r" && active && (active.status === "detached" || active.status === "error")) {
       workbench.reconnect(active.id);
       return;
@@ -640,12 +675,18 @@ export function App({
     );
   };
 
+  // At phone-sized/80x24 terminals only one pane fits. Overlays and launch
+  // forms must still replace the sidebar even when they were opened while the
+  // process picker owned focus.
+  const minimalMainVisible = focus === "panel" || showHelp || paletteOpen || targetLaunch !== null;
+
   return (
     <Box flexDirection="column">
       <StatusHeader session={active} deviceLabel={selectedDeviceLabel} compact={compact} />
       <ModeBar route={route} paletteOpen={paletteOpen} connected={Boolean(active)} compact={compact} />
       <Box>
-        <Sidebar
+        {(!minimal || !minimalMainVisible) && <Sidebar
+          expanded={minimal}
           deviceLabel={selectedDeviceLabel}
           deviceCount={deviceOptions.length}
           processes={visibleProcesses}
@@ -660,8 +701,8 @@ export function App({
           sessions={state.sessions}
           activeId={state.activeId}
           focus={showHelp || targetLaunch || paletteOpen || focus === "panel" ? null : focus}
-        />
-        <Box
+        />}
+        {(!minimal || minimalMainVisible) && <Box
           flexDirection="column"
           flexGrow={1}
           borderStyle="round"
@@ -683,7 +724,7 @@ export function App({
               }}
             />
           ) : modeContent()}
-        </Box>
+        </Box>}
       </Box>
     </Box>
   );

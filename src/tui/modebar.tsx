@@ -100,9 +100,9 @@ export function ModeBar({
 }): React.JSX.Element {
   const stage = journeyStage(route);
   const steps: Array<{ id: JourneyStage; label: string }> = [
-    { id: "connect", label: "1 connect" },
-    { id: "mods", label: "2 mods" },
-    { id: "inspect", label: "3 inspect" },
+    { id: "connect", label: "1: connect" },
+    { id: "mods", label: "2: mods" },
+    { id: "inspect", label: "3: inspect" },
   ];
   return (
     <Box paddingX={1}>

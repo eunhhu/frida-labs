@@ -18,11 +18,11 @@ bun install
 bun run flab
 ```
 
-Then use the screen in this order:
+Then use the screen in this order (the number keys switch directly):
 
-1. **Connect** — start typing the game name, choose it, and press Enter.
-2. **Mods** — run the connected game's named controls and QoL actions.
-3. **Inspect** — read game structure, hook checks, errors, and live output.
+1. Press `1`: **Connect** — type the game name, choose it, and press Enter.
+2. Press `2`: **Mods** — run the connected game's named controls and QoL actions.
+3. Press `3`: **Inspect** — read game structure, hook checks, errors, and live output.
 
 Press `Ctrl+V` to switch local, USB/mobile, exact, or remote devices. Press
 `Ctrl+P` only when you need advanced tools such as manual PID/spawn, REPL,
@@ -110,6 +110,10 @@ codex '$build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=atta
 The complete copy-paste commands, remote/mobile variants, safety boundary,
 recon sequence, coverage matrix, and definition of done are in
 [the AI harness guide](docs/agent-game-mod-guide.md).
+
+The latest physical Android device run, per-game coverage, blocked scope, and
+reproducible verification results are in
+[the Android live-verification report](docs/android-live-verification.md).
 
 A finished target provides the same game actions through:
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Box, Text, useInput } from "ink";
+import { Box, Text, useInput, useWindowSize } from "ink";
 import {
   authorizeAction,
   normalizeRpcDescriptors,
@@ -123,6 +123,18 @@ function inputLabel(descriptor: CanonicalRpcDescriptor): string {
   return `Input: ${descriptor.args.map((arg) => `${arg.name}${arg.optional ? " (optional)" : ""}`).join(", ")}`;
 }
 
+function argumentHint(type: CanonicalRpcDescriptor["args"][number]["type"]): string {
+  switch (type) {
+    case "boolean": return "type exactly true or false";
+    case "number": return "type a finite number";
+    case "integer": return "type a whole number";
+    case "json": return "type valid JSON";
+    case "address": return "use a 0x-prefixed address";
+    case "pattern": return "use Frida bytes, e.g. 48 8b ?? ??";
+    default: return "type text";
+  }
+}
+
 function oneLine(value: string, limit = 240): string {
   const flattened = value.replace(/\s+/g, " ").trim();
   return flattened.length <= limit ? flattened : `${flattened.slice(0, Math.max(0, limit - 1))}…`;
@@ -147,6 +159,33 @@ interface ManagedReceiptView {
   detail?: string;
   config?: string;
   rows: string[];
+}
+
+function compactField(value: unknown): string {
+  if (value === null) return "null";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return `${value.length} item(s)`;
+  if (typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>);
+    const simple = entries
+      .filter(([, item]) => item === null || ["string", "number", "boolean"].includes(typeof item))
+      .slice(0, 6)
+      .map(([key, item]) => `${key}=${String(item)}`);
+    return simple.length ? simple.join(" · ") : `${entries.length} field(s)`;
+  }
+  return String(value);
+}
+
+function jsonReceiptView(summary: string): ManagedReceiptView | null {
+  let value: unknown;
+  try { value = JSON.parse(summary); }
+  catch { return null; }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const entries = Object.entries(value as Record<string, unknown>);
+  return {
+    headline: `${entries.length} result field(s)`,
+    rows: entries.slice(0, 6).map(([key, item]) => `${key}: ${compactField(item)}`),
+  };
 }
 
 function managedReceiptView(receipt: ActionReceipt): ManagedReceiptView | null {
@@ -190,6 +229,10 @@ function managedReceiptView(receipt: ActionReceipt): ManagedReceiptView | null {
 /** Describe-driven action chooser shared by Instrument, Analysis, and Debug. */
 export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
   const { session, mode } = props;
+  const windowSize = useWindowSize();
+  const compact = windowSize.rows < 36 || windowSize.columns < 100;
+  const minimal = windowSize.rows < 28 || windowSize.columns < 90;
+  const actionView = minimal ? 3 : compact ? 4 : ACTION_VIEW;
   const [cursor, setCursor] = useState(0);
   const [capture, setCapture] = useState<CaptureState | null>(null);
   const [busy, setBusy] = useState(false);
@@ -214,12 +257,21 @@ export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
   );
   const selectedIndex = Math.min(cursor, Math.max(0, actions.length - 1));
   const selected = actions[selectedIndex] ?? null;
+  const categorySummary = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const descriptor of actions) {
+      const category = actionCategory(descriptor);
+      counts.set(category, (counts.get(category) ?? 0) + 1);
+    }
+    return [...counts].map(([category, count]) => `${category} ${count}`).join(" · ");
+  }, [actions]);
   const latest = latestForMode(session.receipts, mode);
   const latestDescriptor = latest
     ? normalized.descriptors.find((descriptor) => descriptor.name === latest.action) ?? null
     : null;
   const managedLatest = latest ? managedReceiptView(latest) : null;
-  const receiptRows = Math.max(0, Math.min(MAX_RECEIPT_ROWS, props.receiptRows ?? 5));
+  const receiptView = managedLatest ?? (latest ? jsonReceiptView(latest.result.summary) : null);
+  const receiptRows = Math.max(0, Math.min(compact ? 2 : MAX_RECEIPT_ROWS, props.receiptRows ?? 5));
   const maxRowOffset = Math.max(0, (latest?.result.rows.length ?? 0) - receiptRows);
   const visibleRowOffset = Math.min(rowOffset, maxRowOffset);
 
@@ -323,8 +375,8 @@ export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
       return;
     }
 
-    if (key.upArrow) setCursor(Math.max(0, selectedIndex - 1));
-    else if (key.downArrow) setCursor(Math.min(Math.max(0, actions.length - 1), selectedIndex + 1));
+    if (key.upArrow) setCursor((current) => Math.max(0, current - 1));
+    else if (key.downArrow) setCursor((current) => Math.min(Math.max(0, actions.length - 1), current + 1));
     else if (key.return && selected && !busy) {
       if (selected.args.length === 0) invoke(selected, []);
       else beginCapture(selected);
@@ -333,9 +385,9 @@ export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
 
   const windowStart = Math.max(
     0,
-    Math.min(selectedIndex - Math.floor(ACTION_VIEW / 2), Math.max(0, actions.length - ACTION_VIEW)),
+    Math.min(selectedIndex - Math.floor(actionView / 2), Math.max(0, actions.length - actionView)),
   );
-  const visible = actions.slice(windowStart, windowStart + ACTION_VIEW);
+  const visible = actions.slice(windowStart, windowStart + actionView);
   const captureArg = capture?.descriptor.args[capture.index];
 
   return (
@@ -349,7 +401,9 @@ export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
           ↑/↓ choose · Enter {busy ? "running…" : "run"} · i details
           {props.enablePaging ? " · j/k result · PgUp/PgDn page" : ""}
         </Text>
-        {actions.length > 0 && <Text dimColor>{selectedIndex + 1}/{actions.length} available actions</Text>}
+        {actions.length > 0 && (
+          <Text dimColor>{actions.length} actions · {categorySummary} · selected {selectedIndex + 1}</Text>
+        )}
       </Box>
 
       {session.describe === null && <Text color="yellow">Loading game actions…</Text>}
@@ -366,6 +420,9 @@ export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
           </Text>
         );
       })}
+      {windowStart + visible.length < actions.length && (
+        <Text dimColor>  ↓ {actions.length - windowStart - visible.length} more actions</Text>
+      )}
 
       {selected && (
         <Box flexDirection="column" borderTop borderStyle="single" borderColor="gray">
@@ -391,7 +448,7 @@ export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
           <Text>
             {captureArg.name}: {captureArg.type}{captureArg.optional ? " (optional; empty ends capture)" : ""} &gt; {capture.input}
           </Text>
-          <Text dimColor>Enter accepts this value · Esc cancels</Text>
+          <Text dimColor>{argumentHint(captureArg.type)} · Enter accepts · Esc cancels</Text>
         </Box>
       )}
 
@@ -401,7 +458,7 @@ export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
         {latest && (
           <>
             <Text color={receiptColor(latest.status)}>
-              {latest.status.toUpperCase()} · {latestDescriptor ? actionLabel(latestDescriptor) : latest.action} · {managedLatest?.headline ?? oneLine(latest.result.summary || "(no summary)")}
+              {latest.status.toUpperCase()} · {latestDescriptor ? actionLabel(latestDescriptor) : latest.action} · {receiptView?.headline ?? oneLine(latest.result.summary || "(no summary)")}
             </Text>
             {latest.error && <Text color="red">{latest.error.code}: {oneLine(latest.error.message)}</Text>}
             {latest.verification && (
@@ -410,9 +467,13 @@ export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
                 {latest.verification.detail ? ` · ${oneLine(latest.verification.detail)}` : ""}
               </Text>
             )}
-            {managedLatest?.detail && <Text>{managedLatest.detail}</Text>}
-            {managedLatest?.config && <Text dimColor>{oneLine(managedLatest.config)}</Text>}
-            {managedLatest?.rows.map((row, index) => <Text key={`managed-${index}`}>{oneLine(row)}</Text>)}
+            {receiptView?.detail && <Text>{receiptView.detail}</Text>}
+            {receiptView?.config && <Text dimColor>{oneLine(receiptView.config)}</Text>}
+            {receiptView?.rows.slice(0, compact ? 2 : receiptView.rows.length)
+              .map((row, index) => <Text key={`view-${index}`}>{oneLine(row, 150)}</Text>)}
+            {compact && receiptView && receiptView.rows.length > 2 && (
+              <Text dimColor>+ {receiptView.rows.length - 2} more result field(s) · widen terminal to show</Text>
+            )}
             {latest.result.rows.slice(visibleRowOffset, visibleRowOffset + receiptRows).map((row, index) => (
               <Text key={visibleRowOffset + index}>{oneLine(row)}</Text>
             ))}

@@ -138,15 +138,43 @@ function humanProject(result: ProjectResult): string {
   return `[+] ${result.operation} ${result.name} (${result.entry})${result.warnings.length ? ` — ${result.warnings.join("; ")}` : ""}`;
 }
 
+export function completeHumanRepl(line: string, rpcNames: readonly string[]): [string[], string] {
+  const candidates = [...new Set([
+    ...rpcNames.map((name) => `${name}(`),
+    ...rpcNames.map((name) => `await ${name}(`),
+    ".exit",
+    ".quit",
+  ])];
+  const matches = candidates.filter((candidate) => candidate.startsWith(line));
+  return [matches.length ? matches : candidates, line];
+}
+
 
 async function startHumanSession(options: SessionOptions, label: string, ctx: CmdCtx): Promise<number> {
+  let rl: ReturnType<typeof createInterface> | null = null;
+  let detachedReason: string | null = null;
   const session = await startSession(options, {
     onLog: (line) => ctx.out(line),
     onError: (line) => ctx.err(line),
-    onClose: (reason) => { ctx.out(`[detached: ${reason}]`); process.exit(0); },
+    onClose: (reason) => {
+      detachedReason = reason;
+      ctx.out(`[detached: ${reason}]`);
+      rl?.close();
+    },
   });
-  ctx.out(`REPL ready — rpc exports: ${(await session.describe()).map((item) => item.name).join(", ") || "(none)"} · .exit to quit`);
-  const rl = createInterface({ input: process.stdin, output: process.stdout, prompt: `${label}> ` });
+  const descriptors = await session.describe();
+  const rpcNames = descriptors.map((item) => item.name);
+  ctx.out(`REPL ready — rpc exports: ${rpcNames.join(", ") || "(none)"} · .exit to quit`);
+  if (detachedReason !== null) {
+    await session.close();
+    return 0;
+  }
+  rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    prompt: `${label}> `,
+    completer: (line: string) => completeHumanRepl(line, rpcNames),
+  });
   rl.prompt();
   rl.on("line", async (line) => {
     const source = line.trim();
@@ -159,8 +187,13 @@ async function startHumanSession(options: SessionOptions, label: string, ctx: Cm
     }
     rl.prompt();
   });
-  rl.on("close", async () => { await session.close(); process.exit(0); });
-  return 0;
+  // Bun may not keep the process alive solely for readline listeners. Hold
+  // the command open until .exit, stdin EOF, or target detach closes the REPL.
+  return await new Promise<number>((resolve) => {
+    rl!.once("close", () => {
+      void session.close().finally(() => resolve(0));
+    });
+  });
 }
 
 async function startMachineSession(options: SessionOptions, ctx: CmdCtx): Promise<number> {
