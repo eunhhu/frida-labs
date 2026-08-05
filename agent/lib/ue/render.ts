@@ -87,6 +87,8 @@ export class UeCanvas {
   clipY: number | null = null;
   ready = false;
 
+  get hooked(): boolean { return this.hook !== null; }
+
   async init(): Promise<string> {
     const pe = await findProcessEvent();
     if (!pe) return "[ue] ProcessEvent not found";
@@ -130,7 +132,7 @@ export class UeCanvas {
     const hookAddr = rP(rs.vt.add(rs.slot * 8));
     if (!hookAddr) return "[ue] bad hook address";
     const self = this;
-    this.hook = Interceptor.attach(hookAddr, {
+    const nextHook = Interceptor.attach(hookAddr, {
       onEnter(a) { (this as unknown as { hud: NativePointer }).hud = a[0]; },
       onLeave() {
         try {
@@ -145,12 +147,15 @@ export class UeCanvas {
         } catch { /* never crash the render thread */ }
       },
     });
+    const previous = this.hook;
+    this.hook = nextHook;
+    if (previous) { try { previous.detach(); } catch { /* already gone */ } }
     Interceptor.flush();
     return `[ue] render hook installed (slot ${rs.slot})`;
   }
 
   unhook(): string {
-    if (this.hook) { this.hook.detach(); this.hook = null; }
+    if (this.hook) { try { this.hook.detach(); } catch { /* already gone */ } this.hook = null; }
     Interceptor.flush();
     return "[ue] render hook removed";
   }

@@ -45,10 +45,26 @@ export function scan(pattern: string, module: Module = mainModule(), limit = 64)
 
 /** Scan for a UTF-8 (and optionally UTF-16LE) string literal in a module. */
 export function scanText(text: string, module: Module = mainModule(), opts: { utf16?: boolean; limit?: number } = {}): NativePointer[] {
-  const bytes = text.split("").map((c) => c.charCodeAt(0).toString(16).padStart(2, "0"));
+  const hex = (bytes: number[]): string => bytes.map((b) => b.toString(16).padStart(2, "0")).join(" ");
+  const utf8: number[] = [];
+  for (const ch of text) {
+    const cp = ch.codePointAt(0)!;
+    if (cp <= 0x7f) utf8.push(cp);
+    else if (cp <= 0x7ff) utf8.push(0xc0 | (cp >> 6), 0x80 | (cp & 0x3f));
+    else if (cp <= 0xffff) utf8.push(0xe0 | (cp >> 12), 0x80 | ((cp >> 6) & 0x3f), 0x80 | (cp & 0x3f));
+    else utf8.push(0xf0 | (cp >> 18), 0x80 | ((cp >> 12) & 0x3f), 0x80 | ((cp >> 6) & 0x3f), 0x80 | (cp & 0x3f));
+  }
+  const utf16: number[] = [];
+  for (let i = 0; i < text.length; i++) {
+    const unit = text.charCodeAt(i);
+    utf16.push(unit & 0xff, unit >>> 8);
+  }
   const hits: NativePointer[] = [];
-  const push = (pat: string) => { try { Memory.scanSync(module.base, module.size, pat).forEach((m) => hits.push(m.address)); } catch { /* */ } };
-  push(bytes.join(" "));
-  if (opts.utf16) push(bytes.map((b) => `${b} 00`).join(" "));
+  const push = (pat: string) => {
+    if (!pat) return;
+    try { Memory.scanSync(module.base, module.size, pat).forEach((m) => hits.push(m.address)); } catch { /* */ }
+  };
+  push(hex(utf8));
+  if (opts.utf16) push(hex(utf16));
   return hits.slice(0, opts.limit ?? 64);
 }

@@ -22,9 +22,14 @@ bun-debug.log*
 Thumbs.db
 desktop.ini
 
-# agents
-.gjc/
-!.gjc/skills/*/*.md
+# GJC runtime/session state stays local; project config and reusable skills ship.
+.gjc/*
+!.gjc/config.yml
+!.gjc/skills/
+.gjc/skills/*
+!.gjc/skills/*/
+!.gjc/skills/*/SKILL.md
+artifacts/
 
 # compile
 *.bun-build

@@ -37,14 +37,24 @@ export function api(): JavaRuntime {
   return cached;
 }
 
-/** Run `fn` on the VM thread when available; returns null when undetected. */
-export function perform<T>(fn: () => T): T | null {
-  if (!available()) return null;
-  let out: T | null = null;
-  api().perform(() => {
-    out = fn();
+/** Run `fn` on the VM thread when available; resolves null when undetected.
+ *  Java.perform() may defer until the app class loader exists, so the result
+ *  must cross an async boundary instead of being read immediately. */
+export function perform<T>(fn: () => T | Promise<T>): Promise<T | null> {
+  if (!available()) return Promise.resolve(null);
+  return new Promise<T>((resolve, reject) => {
+    try {
+      api().perform(() => {
+        try {
+          Promise.resolve(fn()).then(resolve, reject);
+        } catch (e) {
+          reject(e);
+        }
+      });
+    } catch (e) {
+      reject(e);
+    }
   });
-  return out;
 }
 
 /** Demo helper: gate state report (expected available:false off-Android). */

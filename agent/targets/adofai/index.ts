@@ -41,13 +41,13 @@ rpc.exports = {
 
   __describe(): unknown {
     return [
-      { name: "info", doc: "Assembly/image/class counts" },
-      { name: "assemblies", doc: "Loaded assembly image names" },
-      { name: "classes", args: [{ name: "pattern", type: "string?" }], doc: "Assembly-CSharp classes (regex filter)" },
-      { name: "methods", args: [{ name: "className", type: "string" }, { name: "ns", type: "string?" }] },
-      { name: "fields", args: [{ name: "className", type: "string" }, { name: "ns", type: "string?" }] },
-      { name: "address", args: [{ name: "className", type: "string" }, { name: "method", type: "string" }, { name: "ns", type: "string?" }] },
-      { name: "trace", args: [{ name: "className", type: "string" }, { name: "method", type: "string" }, { name: "ns", type: "string?" }] },
+      { name: "info", doc: "Assembly/image/class counts", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
+      { name: "assemblies", doc: "Loaded assembly image names", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
+      { name: "classes", args: [{ name: "pattern", type: "string?" }], doc: "Assembly-CSharp classes (regex filter)", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
+      { name: "methods", args: [{ name: "className", type: "string" }, { name: "ns", type: "string?" }], capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
+      { name: "fields", args: [{ name: "className", type: "string" }, { name: "ns", type: "string?" }], capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
+      { name: "address", args: [{ name: "className", type: "string" }, { name: "method", type: "string" }, { name: "ns", type: "string?" }], capabilities: ["instrument", "analysis"], effect: "read", returns: "scalar" },
+      { name: "trace", args: [{ name: "className", type: "string" }, { name: "method", type: "string" }, { name: "ns", type: "string?" }], capabilities: ["instrument", "debug"], effect: "hook", returns: "scalar" },
       { name: "__describe", doc: "This descriptor" },
     ];
   },

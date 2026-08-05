@@ -1,0 +1,4 @@
+skills:
+  enabled: true
+  enableSkillCommands: true
+  enablePiProject: true

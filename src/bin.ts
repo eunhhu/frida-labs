@@ -9,11 +9,17 @@ if (argv.length === 0 && process.stdin.isTTY && process.stdout.isTTY) {
   await runTui(undefined);
 } else if (argv[0] === "tui") {
   const { runTui } = await import("./tui/index.js");
-  // flab tui [target] [--proc P] — entry-path targets need --proc, same as run.
-  const procIdx = argv.indexOf("--proc");
-  const proc = procIdx >= 0 ? argv[procIdx + 1] : undefined;
-  const target = argv[1] && !argv[1].startsWith("--") ? argv[1] : undefined;
-  await runTui(target, proc);
+  const { parseCliArgs } = await import("./cli/args.js");
+  const { deviceSelectorFromFlags } = await import("./core/devices.js");
+  const parsed = parseCliArgs(argv);
+  if (parsed.error) throw new Error(parsed.error.message);
+  const unsupported = Object.keys(parsed.flags).find((flag) => !["proc", "device", "host", "device-timeout"].includes(flag));
+  if (unsupported) throw new Error(`--${unsupported} is not valid for tui`);
+  if (parsed.args.length > 1) throw new Error("usage: flab tui [target] [--proc P] [--device DEVICE | --host HOST]");
+  const proc = typeof parsed.flags.proc === "string" ? parsed.flags.proc : undefined;
+  const target = parsed.args[0];
+  const device = deviceSelectorFromFlags(parsed.flags.device, parsed.flags.host, parsed.flags["device-timeout"]);
+  await runTui(target, proc, device);
 } else {
   const { runCli } = await import("./cli/index.js");
   process.exit(await runCli(argv));

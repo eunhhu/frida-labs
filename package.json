@@ -8,6 +8,8 @@
     "flab": "bun src/bin.ts",
     "tui": "bun src/bin.ts tui",
     "depcheck": "bun src/bin.ts depcheck",
+    "test": "bun test",
+    "test:runtime": "bun tests/runtime-attach.ts",
     "typecheck": "tsc -p tsconfig.json && tsc -p src/tsconfig.json",
     "build-bin": "bun build --compile src/launcher.ts --outfile flab"
   },

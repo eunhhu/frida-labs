@@ -531,9 +531,9 @@ rpc.exports = {
   dispose(): void { trainer.dispose(); },
   __describe(): unknown {
     return [
-      { name: "cmd", args: [{ name: "raw", type: "string" }], doc: "Run a trainer command (see 'help')" },
-      { name: "set", args: [{ name: "id", type: "string" }, { name: "on", type: "boolean" }], doc: "Toggle a feature by id" },
-      { name: "dispose", doc: "Stop timers, unhook chat, release features" },
+      { name: "cmd", args: [{ name: "raw", type: "string" }], doc: "Run a trainer command (see 'help')", capabilities: ["instrument"], effect: "write", returns: "scalar" },
+      { name: "set", args: [{ name: "id", type: "string" }, { name: "on", type: "boolean" }], doc: "Toggle a feature by id", capabilities: ["instrument"], effect: "write", returns: "scalar" },
+      { name: "dispose", doc: "Stop timers, unhook chat, release features", capabilities: ["instrument", "debug"], effect: "control", returns: "scalar" },
       { name: "__describe", doc: "This descriptor" },
     ];
   },

@@ -24,6 +24,7 @@ import * as sym from "../../lib/sym.js";
 import * as objc from "../../lib/objc.js";
 import * as java from "../../lib/java.js";
 import * as excrash from "../../lib/excrash.js";
+import * as instruments from "../../lib/instruments.js";
 import { mono } from "../../lib/mono/index.js";
 
 const engines = detect.detectAll();
@@ -31,6 +32,16 @@ if (engines.length === 0) ok("_probe: no known engine detected — native-only s
 else for (const e of engines) ok(`_probe: detected ${e.label} @ ${e.module.name}`);
 
 const freezes = new Map<string, watchlib.FreezeHandle>();
+let rpcSurface: RpcExports = {};
+
+function stopEverything(): instruments.InstrumentResult {
+  const result = instruments.instrumentStopAll();
+  for (const handle of freezes.values()) handle.stop();
+  freezes.clear();
+  hook.detachAll();
+  watchlib.unwatchAll();
+  return result;
+}
 
 const base = {
   engines(): Array<{ id: string; label: string; module: string }> {
@@ -68,6 +79,15 @@ const base = {
     hook.trace(ptr(addr), { args: args ?? 4 });
     return `tracing ${addr}`;
   },
+  instrumentStart(kind: unknown, addr: unknown, options?: unknown) {
+    return instruments.instrumentStart(kind, addr, options);
+  },
+  instrumentList(state?: unknown) { return instruments.instrumentList(state); },
+  instrumentStatus(id: unknown) { return instruments.instrumentStatus(id); },
+  instrumentUpdate(id: unknown, patch: unknown) { return instruments.instrumentUpdate(id, patch); },
+  instrumentStop(id: unknown) { return instruments.instrumentStop(id); },
+  instrumentDelete(id: unknown) { return instruments.instrumentDelete(id); },
+  instrumentStopAll() { return stopEverything(); },
   // --- 8 advanced-module demos (firing-verified; see appendix A of the plan) ---
   /** Stalker: capture events on the first enumerated thread for `ms`. */
   async demoStalker(ms?: number): Promise<{ total: number; verified: boolean; state: string }> {
@@ -127,44 +147,61 @@ const base = {
   /** Structured rpc surface descriptor — consumed by the host describe(). */
   __describe(): unknown {
     const d: Array<unknown> = [
-      { name: "engines", doc: "Detected engines/managed runtimes" },
-      { name: "modules", args: [{ name: "q", type: "string" }], doc: "Modules matching substring" },
-      { name: "exports", args: [{ name: "q", type: "string" }, { name: "mod", type: "string?" }], doc: "Exports matching substring" },
-      { name: "scan", args: [{ name: "pattern", type: "string" }, { name: "modName", type: "string?" }], doc: "Byte-pattern scan" },
-      { name: "strings", args: [{ name: "q", type: "string" }, { name: "cap", type: "number?" }], doc: "String search" },
-      { name: "hexdump", args: [{ name: "addr", type: "string" }, { name: "len", type: "number?" }] },
-      { name: "peek", args: [{ name: "addr", type: "string" }, { name: "type", type: "string?" }] },
-      { name: "poke", args: [{ name: "addr", type: "string" }, { name: "value", type: "number" }, { name: "type", type: "string?" }] },
-      { name: "freeze", args: [{ name: "addr", type: "string" }, { name: "value", type: "number" }, { name: "type", type: "string?" }] },
-      { name: "unfreeze", args: [{ name: "addr", type: "string" }] },
-      { name: "watch", args: [{ name: "addr", type: "string" }, { name: "type", type: "string?" }] },
-      { name: "trace", args: [{ name: "addr", type: "string" }, { name: "args", type: "number?" }] },
-      { name: "detachAll" },
-      { name: "demoStalker", args: [{ name: "ms", type: "number?" }], doc: "Stalker block capture demo (firing-verified)" },
-      { name: "demoMam", doc: "MemoryAccessMonitor hit demo" },
-      { name: "demoSym", args: [{ name: "q", type: "string?" }], doc: "DebugSymbol resolve demo" },
-      { name: "demoObjcGate", doc: "ObjC bridge gate status" },
-      { name: "demoJavaGate", doc: "Java bridge gate status" },
-      { name: "demoHookVerified", doc: "Verified Interceptor attach, strict assertFired" },
-      { name: "demoExcrashInstall", doc: "Exception-report install/uninstall demo" },
-      { name: "demoReplace", doc: "Interceptor.replace with JS implementation" },
+      { name: "engines", doc: "Detected engines/managed runtimes", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
+      { name: "modules", args: [{ name: "q", type: "string" }], doc: "Modules matching substring", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
+      { name: "exports", args: [{ name: "q", type: "string" }, { name: "mod", type: "string?" }], doc: "Exports matching substring", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
+      { name: "scan", args: [{ name: "pattern", type: "pattern" }, { name: "modName", type: "string?" }], doc: "Byte-pattern scan", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
+      { name: "strings", args: [{ name: "q", type: "string" }, { name: "cap", type: "integer?" }], doc: "String search", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
+      { name: "hexdump", args: [{ name: "addr", type: "address" }, { name: "len", type: "integer?" }], capabilities: ["instrument", "analysis"], effect: "read", returns: "hex" },
+      { name: "peek", args: [{ name: "addr", type: "address" }, { name: "type", type: "string?" }], capabilities: ["instrument", "analysis"], effect: "read", returns: "scalar" },
+      { name: "poke", args: [{ name: "addr", type: "address" }, { name: "value", type: "number" }, { name: "type", type: "string?" }], capabilities: ["instrument"], effect: "write", returns: "scalar" },
+      { name: "freeze", args: [{ name: "addr", type: "address" }, { name: "value", type: "number" }, { name: "type", type: "string?" }], capabilities: ["instrument"], effect: "write", returns: "scalar" },
+      { name: "unfreeze", args: [{ name: "addr", type: "address" }], capabilities: ["instrument"], effect: "control", returns: "scalar" },
+      { name: "watch", args: [{ name: "addr", type: "address" }, { name: "type", type: "string?" }], capabilities: ["instrument"], effect: "hook", returns: "scalar" },
+      { name: "trace", args: [{ name: "addr", type: "address" }, { name: "args", type: "integer?" }], capabilities: ["instrument"], effect: "hook", returns: "scalar" },
+      { name: "instrumentStart", args: [{ name: "kind", type: "string" }, { name: "addr", type: "address" }, { name: "options", type: "json?" }], doc: "Create trace/watch/freeze. Options: trace {args,backtrace,log,label}; watch {type,label}; freeze {type,value,intervalMs,label}", capabilities: ["instrument"], effect: "hook", returns: "verification", statusAction: "instrumentStatus" },
+      { name: "instrumentList", args: [{ name: "state", type: "string?" }], doc: "List managed instruments and their live verification state", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
+      { name: "instrumentStatus", args: [{ name: "id", type: "string" }], doc: "Inspect one managed instrument", capabilities: ["instrument", "analysis"], effect: "read", returns: "verification" },
+      { name: "instrumentUpdate", args: [{ name: "id", type: "string" }, { name: "patch", type: "json" }], doc: "Edit address/options transactionally; the instrument keeps its stable id", capabilities: ["instrument"], effect: "control", returns: "verification", statusAction: "instrumentStatus" },
+      { name: "instrumentStop", args: [{ name: "id", type: "string" }], doc: "Stop an instrument but keep its history", capabilities: ["instrument"], effect: "control", returns: "verification", statusAction: "instrumentStatus" },
+      { name: "instrumentDelete", args: [{ name: "id", type: "string" }], doc: "Stop and permanently remove one managed instrument", capabilities: ["instrument"], effect: "control", returns: "scalar" },
+      { name: "instrumentStopAll", doc: "Stop every managed instrument before detach or reload", capabilities: ["instrument"], effect: "control", returns: "table" },
+      { name: "detachAll", capabilities: ["instrument"], effect: "control", returns: "scalar" },
+      { name: "demoStalker", args: [{ name: "ms", type: "integer?" }], doc: "Stalker block capture demo (firing-verified)", capabilities: ["instrument", "debug"], effect: "hook", returns: "verification" },
+      { name: "demoMam", doc: "MemoryAccessMonitor hit demo", capabilities: ["instrument", "debug"], effect: "hook", returns: "verification" },
+      { name: "demoSym", args: [{ name: "q", type: "string?" }], doc: "DebugSymbol resolve demo", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
+      { name: "demoObjcGate", doc: "ObjC bridge gate status", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
+      { name: "demoJavaGate", doc: "Java bridge gate status", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
+      { name: "demoHookVerified", doc: "Verified Interceptor attach, strict assertFired", capabilities: ["instrument", "debug"], effect: "hook", returns: "verification" },
+      { name: "demoExcrashInstall", doc: "Exception-report install/uninstall demo", capabilities: ["debug"], effect: "control", returns: "json" },
+      { name: "demoReplace", doc: "Interceptor.replace with JS implementation", capabilities: ["instrument", "debug"], effect: "hook", returns: "verification" },
     ];
     if (engines.some((e) => e.id === "unity-mono")) {
       d.push(
-        { name: "monoAssemblies" }, { name: "monoClasses", args: [{ name: "re", type: "string" }, { name: "image", type: "string?" }] },
-        { name: "monoMethods", args: [{ name: "ns", type: "string" }, { name: "klass", type: "string" }] },
-        { name: "monoTrace", args: [{ name: "ns", type: "string" }, { name: "klass", type: "string" }, { name: "method", type: "string" }] },
+        { name: "monoAssemblies", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" }, { name: "monoClasses", args: [{ name: "re", type: "string" }, { name: "image", type: "string?" }], capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
+        { name: "monoMethods", args: [{ name: "ns", type: "string" }, { name: "klass", type: "string" }], capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
+        { name: "monoTrace", args: [{ name: "ns", type: "string" }, { name: "klass", type: "string" }, { name: "method", type: "string" }], capabilities: ["instrument"], effect: "hook", returns: "scalar" },
       );
     }
-    if (engines.some((e) => e.id === "cocos2dx")) d.push({ name: "cocosSymbols", args: [{ name: "re", type: "string" }] });
+    if (engines.some((e) => e.id === "cocos2dx")) d.push({ name: "cocosSymbols", args: [{ name: "re", type: "string" }], capabilities: ["instrument", "analysis"], effect: "read", returns: "table" });
     d.push({ name: "__describe", doc: "This descriptor" });
-    return d;
+    const metadata = new Map(d.map((item) => [String((item as { name: string }).name), item]));
+    return Object.keys(rpcSurface).map((name) => metadata.get(name) ?? {
+      name,
+      doc: "Exported RPC without explicit metadata",
+      capabilities: ["instrument"],
+      effect: "control",
+      returns: "json",
+    });
   },
-  detachAll(): string { hook.detachAll(); watchlib.unwatchAll(); return "detached"; },
+  detachAll(): string {
+    stopEverything();
+    return "detached";
+  },
 };
 
 // Engine-specific surface, layered on top when detected.
-const extra: Record<string, (...a: never[]) => unknown> = {};
+const extra: RpcExports = {};
 
 if (engines.some((e) => e.id === "unity-mono")) {
   extra.monoAssemblies = () => mono.assemblies();
@@ -186,4 +223,5 @@ if (engines.some((e) => e.id === "unreal")) {
   warn("_probe: UE game — lib/ue is lazy since Phase B but its queries are game-specific, so it is not exercised here; write a real target importing ../../lib/ue");
 }
 
-rpc.exports = { ...base, ...extra };
+rpcSurface = { ...base, ...extra };
+rpc.exports = rpcSurface;

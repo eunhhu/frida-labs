@@ -47,7 +47,7 @@ rpc.exports = {
   toggle(on: boolean) { enabled = !!on; return `enabled=${enabled}`; },
   __describe(): unknown {
     return [
-      { name: "toggle", args: [{ name: "on", type: "boolean" }], doc: "Enable/disable judgment correction" },
+      { name: "toggle", args: [{ name: "on", type: "boolean" }], doc: "Enable/disable judgment correction", capabilities: ["instrument"], effect: "write", returns: "scalar" },
       { name: "__describe", doc: "This descriptor" },
     ];
   },
