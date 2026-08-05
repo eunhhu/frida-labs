@@ -336,7 +336,7 @@ function windowAround<T>(items: readonly T[], cursor: number, size: number): Arr
   return items.slice(start, start + size).map((item, offset) => ({ item, index: start + offset }));
 }
 
-/** Left column: live processes, registered targets, and open sessions. */
+/** Left column: one connect flow, with sessions shown only after they exist. */
 export function Sidebar(props: {
   deviceLabel: string;
   deviceCount: number;
@@ -356,62 +356,107 @@ export function Sidebar(props: {
   const selectedProcess = props.processes[props.processIndex];
   const matchedTarget = selectedProcess?.matchedTargets[0];
   const multipleMatches = (selectedProcess?.matchedTargets.length ?? 0) > 1;
+  const showConnectLists = props.sessions.length === 0 || props.focus === "processes" || props.focus === "targets";
   return (
     <Box flexDirection="column" width={36} flexShrink={0} borderStyle="round" borderColor="gray" paddingX={1}>
-      <Text bold color="cyan">device: {clip(props.deviceLabel, 23)}</Text>
-      <Text dimColor>v next device ({props.deviceCount})</Text>
-      <Text bold underline>processes {props.processes.length}/{props.processTotal}</Text>
-      {(props.processFilterActive || props.processQuery) && (
-        <Text color={props.processFilterActive ? "yellow" : "gray"}>
-          filter: {props.processQuery || "type to search"}{props.processFilterActive ? "_" : ""}
-        </Text>
+      <Text bold color="cyan">{props.sessions.length ? "CONNECTION" : "1. CONNECT"}</Text>
+      <Text>Device: {clip(props.deviceLabel, 24)}</Text>
+      <Text dimColor>Ctrl+V device ({props.deviceCount} found)</Text>
+      {props.sessions.length > 0 && (
+        <>
+          <Text> </Text>
+          <Text bold underline>connections ({props.sessions.length}/{MAX_SESSIONS})</Text>
+          {props.sessions.map((s) => (
+            <Text key={s.id} color={s.id === props.activeId ? statusTint[s.status] : "gray"}>
+              {s.id === props.activeId ? "● " : "○ "}#{s.id} {clip(s.target, 14)} <Text dimColor>{s.status}</Text>
+            </Text>
+          ))}
+          <Text dimColor>Ctrl+D change app · Ctrl+T saved</Text>
+        </>
       )}
-      {props.processesLoading && <Text color="yellow">discovering…</Text>}
-      {props.processesError && <Text color="red">{clip(props.processesError, 30)}</Text>}
-      {!props.processesLoading && !props.processesError && props.processes.length === 0 && <Text color="yellow">no matching processes</Text>}
-      {!props.processesLoading && !props.processesError && props.processes.length === 0 && <Text dimColor>none — r refresh</Text>}
-      {windowAround(props.processes, props.processIndex, 6).map(({ item, index }) => (
-        <Text key={`${item.pid}-${item.name}`} color={props.focus === "processes" && index === props.processIndex ? "cyan" : undefined}>
-          {props.focus === "processes" && index === props.processIndex ? "❯ " : "  "}
-          {item.matchedTargets.length ? "◆ " : "· "}{clip(item.name, 18)} <Text dimColor>PID {item.pid}</Text>
-        </Text>
-      ))}
-      <Text dimColor>
-        {selectedProcess
-          ? `PID ${selectedProcess.pid} · Enter ${multipleMatches
-              ? `choose ${selectedProcess.matchedTargets.length}`
-              : matchedTarget ? clip(matchedTarget, 14) : "Probe"}`
-          : "no process selected"}
-      </Text>
-      <Text dimColor>n save · / filter · r refresh</Text>
-      <Text> </Text>
-      <Text bold underline>targets</Text>
-      {props.targets.length === 0 && <Text color="yellow">none — flab new</Text>}
-      {windowAround(props.targets, props.pickerIndex, 6).map(({ item: t, index: i }) => (
-        <Text key={t} color={props.focus === "targets" && i === props.pickerIndex ? "green" : undefined}>
-          {props.focus === "targets" && i === props.pickerIndex ? "❯ " : "  "}{clip(t, 29)}
-        </Text>
-      ))}
-      <Text dimColor>enter attach · n/e/r/u/d manage</Text>
-      <Text> </Text>
-      <Text bold underline>sessions ({props.sessions.length}/{MAX_SESSIONS})</Text>
-      {props.sessions.length === 0 && <Text dimColor>none — enter attaches</Text>}
-      {props.sessions.map((s) => (
-        <Text key={s.id} color={s.id === props.activeId ? statusTint[s.status] : "gray"}>
-          {s.id === props.activeId ? "● " : "○ "}#{s.id} {clip(s.target, 14)} <Text dimColor>{s.status}</Text>
-        </Text>
-      ))}
+      {showConnectLists && (
+        <>
+          <Text> </Text>
+          <Text bold underline>running apps · {props.processTotal} found</Text>
+          {(props.processFilterActive || props.processQuery) && (
+            <Text color={props.processFilterActive ? "yellow" : "gray"}>
+              search: {props.processQuery || "type game name"}{props.processFilterActive ? "_" : ""}
+            </Text>
+          )}
+          {props.processesLoading && <Text color="yellow">discovering…</Text>}
+          {props.processesError && <Text color="red">{clip(props.processesError, 30)}</Text>}
+          {!props.processesLoading && !props.processesError && props.processes.length === 0 && props.processFilterActive && !props.processQuery && (
+            <Text color="yellow">start typing to search</Text>
+          )}
+          {!props.processesLoading && !props.processesError && props.processes.length === 0 && (!props.processFilterActive || props.processQuery) && (
+            <Text color="yellow">no matching running app</Text>
+          )}
+          {windowAround(props.processes, props.processIndex, 6).map(({ item, index }) => (
+            <Text key={`${item.pid}-${item.name}`} color={props.focus === "processes" && index === props.processIndex ? "cyan" : undefined}>
+              {props.focus === "processes" && index === props.processIndex ? "❯ " : "  "}
+              {item.matchedTargets.length ? "◆ " : "· "}{clip(item.name, 18)} <Text dimColor>PID {item.pid}</Text>
+            </Text>
+          ))}
+          <Text dimColor>
+            {selectedProcess
+              ? `PID ${selectedProcess.pid} · ${multipleMatches
+                  ? `${selectedProcess.matchedTargets.length} saved matches`
+                  : matchedTarget ? `saved: ${clip(matchedTarget, 14)}` : "quick analysis"}`
+              : props.processFilterActive ? "Esc shows every process" : "/ starts search"}
+          </Text>
+          <Text dimColor>{selectedProcess ? "Enter connect · n save · r refresh" : "Tab saved games · r refresh"}</Text>
+          <Text> </Text>
+          <Text bold underline>saved games</Text>
+          {props.targets.length === 0 && <Text color="yellow">none yet — n creates one</Text>}
+          {windowAround(props.targets, props.pickerIndex, 6).map(({ item: t, index: i }) => (
+            <Text key={t} color={props.focus === "targets" && i === props.pickerIndex ? "green" : undefined}>
+              {props.focus === "targets" && i === props.pickerIndex ? "❯ " : "  "}{clip(t, 29)}
+            </Text>
+          ))}
+          <Text dimColor>Tab switch list · Enter connect · m manage</Text>
+        </>
+      )}
     </Box>
   );
 }
 
 /** Top bar: active session facts at a glance. */
-export function StatusHeader(props: { session: SessionState | null }): React.JSX.Element {
+export function StatusHeader(props: { session: SessionState | null; deviceLabel: string; compact: boolean }): React.JSX.Element {
   const s = props.session;
+  const heading = !s
+    ? "1 CONNECT"
+    : s.status === "live"
+      ? "CONNECTED"
+      : s.status === "connecting"
+        ? "CONNECTING"
+        : s.status === "error"
+          ? "CONNECTION ERROR"
+          : s.status.toUpperCase();
+  if (props.compact) {
+    return (
+      <Box flexDirection="column" paddingX={1}>
+        <Text>
+          <Text bold>flab · {heading}  </Text>
+          {s ? (
+            <Text color={statusTint[s.status]}>
+              #{s.id} {clip(s.target, 18)}{s.pid ? ` · pid ${s.pid}` : ""}{s.describe ? ` · ${s.describe.length} actions` : ""}
+            </Text>
+          ) : <Text dimColor>{clip(props.deviceLabel, 30)}</Text>}
+        </Text>
+        <Text dimColor>
+          {s
+            ? s.status === "live"
+              ? "2 Mods · 3 Inspect · Ctrl+D change game · ? help"
+              : s.detail
+            : "Type game name · ↑/↓ choose · Enter connect · Ctrl+V device"}
+        </Text>
+      </Box>
+    );
+  }
   return (
     <Box flexDirection="column" borderStyle="single" borderColor={s?.status === "error" ? "red" : "gray"} paddingX={1}>
       <Box>
-        <Text bold>flab  </Text>
+        <Text bold>flab · {heading}  </Text>
         {s ? (
           <Text color={statusTint[s.status]}>
             #{s.id} {clip(s.target, 22)}{s.process ? ` (${clip(s.process, 22)})` : ""}{s.pid ? ` pid ${s.pid}` : ""} — {s.status}
@@ -419,9 +464,13 @@ export function StatusHeader(props: { session: SessionState | null }): React.JSX
             {s.describe ? ` · ${s.describe.length} actions` : ""}
             {s.crashes.length ? ` · ${s.crashes.length} crash(es)` : ""}{s.frozen ? " · FROZEN" : ""}
           </Text>
-        ) : <Text dimColor>start: choose process → Enter Probe, or choose registered target</Text>}
+        ) : <Text dimColor>{clip(props.deviceLabel, 32)} · type a game name or Tab to saved games</Text>}
       </Box>
-      <Text dimColor>?: help · Ctrl+D process · Ctrl+T target · Ctrl+S session · Ctrl+P actions · Ctrl+Q quit</Text>
+      <Text dimColor>
+        {s
+          ? "Next: 2 Mods controls the game · 3 Inspect reads structure · Ctrl+P all tools · ? help"
+          : "Type to search · ↑/↓ choose · Enter connect · Ctrl+V device · ? help"}
+      </Text>
       {s && s.detail && (
         <Text color={s.status === "error" ? "red" : s.status === "connecting" ? "yellow" : "gray"}>
           ↳ {s.detail}{s.status === "error" || s.status === "detached" ? " · Ctrl+R retry · Ctrl+W close" : ""}

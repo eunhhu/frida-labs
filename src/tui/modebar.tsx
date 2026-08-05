@@ -27,6 +27,7 @@ export interface ModeSelection {
   surface: InstrumentSurface;
 }
 export type GlobalInputRoute = "quit" | "captured" | "global";
+export type JourneyStage = "connect" | "mods" | "inspect";
 
 export function routeGlobalInput(
   captured: boolean,
@@ -45,15 +46,21 @@ export function modeRoute(mode: TuiMode, sessionId: number | null): ModeRoute {
 }
 
 export const MODE_PALETTE_ITEMS: readonly ModePaletteItem[] = [
-  { id: "project", label: "Project management", mode: "project" },
-  { id: "instrument", label: "Instrument actions", mode: "instrument", surface: "actions" },
-  { id: "debug", label: "Debug timeline/actions", mode: "debug" },
-  { id: "probe", label: "Probe attach/spawn", mode: "probe" },
-  { id: "analysis", label: "Analysis · read only", mode: "analysis" },
-  { id: "repl", label: "Instrument · REPL", mode: "instrument", surface: "repl" },
-  { id: "explorer", label: "Instrument · Explorer", mode: "instrument", surface: "explorer" },
-  { id: "observe", label: "Instrument · Observe", mode: "instrument", surface: "observe" },
+  { id: "project", label: "1 Connect · Manage saved games", mode: "project" },
+  { id: "probe", label: "1 Connect · Manual PID/name/spawn (advanced)", mode: "probe" },
+  { id: "instrument", label: "2 Mods · Game controls", mode: "instrument", surface: "actions" },
+  { id: "repl", label: "2 Mods · Command console (advanced)", mode: "instrument", surface: "repl" },
+  { id: "explorer", label: "2 Mods · Memory explorer (advanced)", mode: "instrument", surface: "explorer" },
+  { id: "observe", label: "2 Mods · Live output", mode: "instrument", surface: "observe" },
+  { id: "analysis", label: "3 Inspect · Read game structure", mode: "analysis" },
+  { id: "debug", label: "3 Inspect · Errors and hook checks", mode: "debug" },
 ];
+
+export function journeyStage(route: ModeRoute): JourneyStage {
+  if (route.mode === "instrument") return "mods";
+  if (route.mode === "analysis" || route.mode === "debug") return "inspect";
+  return "connect";
+}
 
 export function paletteItemAt(index: number): ModePaletteItem {
   if (!Number.isFinite(index)) return MODE_PALETTE_ITEMS[0]!;
@@ -80,13 +87,30 @@ export function nextMode(mode: TuiMode): TuiMode {
   return modeAt(MODES.indexOf(mode) + 1);
 }
 
-export function ModeBar({ route, paletteOpen }: { route: ModeRoute; paletteOpen: boolean }): React.JSX.Element {
+export function ModeBar({
+  route,
+  paletteOpen,
+  connected,
+  compact,
+}: {
+  route: ModeRoute;
+  paletteOpen: boolean;
+  connected: boolean;
+  compact: boolean;
+}): React.JSX.Element {
+  const stage = journeyStage(route);
+  const steps: Array<{ id: JourneyStage; label: string }> = [
+    { id: "connect", label: "1 connect" },
+    { id: "mods", label: "2 mods" },
+    { id: "inspect", label: "3 inspect" },
+  ];
   return (
     <Box paddingX={1}>
       <Text>
-        {MODES.map((candidate) => candidate === route.mode ? `[${candidate}]` : ` ${candidate} `).join(" ")}
-        {"  "}<Text color={paletteOpen ? "yellow" : undefined} bold={paletteOpen}>
-          ^p palette{paletteOpen ? " [open]" : ""}
+        {steps.map((step) => step.id === stage ? `[${step.label}]` : ` ${step.label} `).join("  →  ")}
+        {!compact && <>{"   "}<Text dimColor>{connected ? "session stays connected" : "choose a game, then Enter"}</Text></>}
+        {"   "}<Text color={paletteOpen ? "yellow" : undefined} bold={paletteOpen}>
+          ^p {compact ? "tools" : "all tools"}{paletteOpen ? " [open]" : ""}
         </Text>
       </Text>
     </Box>
@@ -97,13 +121,13 @@ export function ModePalette({ index }: { index: number }): React.JSX.Element {
   const selected = paletteItemAt(index);
   return (
     <Box flexDirection="column" borderStyle="round" borderColor="yellow" paddingX={1}>
-      <Text bold color="yellow">mode/action palette</Text>
+      <Text bold color="yellow">all tools</Text>
       {MODE_PALETTE_ITEMS.map((item) => (
         <Text key={item.id} color={item.id === selected.id ? "cyan" : undefined}>
           {item.id === selected.id ? "❯ " : "  "}{item.label}
         </Text>
       ))}
-      <Text dimColor>↑/↓ select · enter open · Ctrl+P/Esc cancel</Text>
+      <Text dimColor>↑/↓ choose · Enter open · Ctrl+P/Esc back</Text>
     </Box>
   );
 }

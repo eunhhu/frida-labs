@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { buildProbeRequest, buildTargetLaunch } from "../src/tui/probe.js";
-import { launchForProcess, launchOnDevice, cycleSurface, suggestedTargetName } from "../src/tui/index.js";
+import { launchForProcess, launchOnDevice, cycleSurface, processChoices, suggestedTargetName } from "../src/tui/index.js";
 import { projectCommand } from "../src/tui/project.js";
-import { modeAt, modeRoute, nextMode, paletteItemAt, routeGlobalInput } from "../src/tui/modebar.js";
+import { journeyStage, modeAt, modeRoute, nextMode, paletteItemAt, routeGlobalInput } from "../src/tui/modebar.js";
 
 test("mode and surface navigation wraps without invalid state", () => {
   expect(nextMode("analysis")).toBe("project");
@@ -11,6 +11,20 @@ test("mode and surface navigation wraps without invalid state", () => {
   expect(cycleSurface("observe")).toBe("actions");
   expect(modeRoute("analysis", 7)).toEqual({ mode: "analysis", sessionId: 7 });
   expect(modeRoute("project", null)).toEqual({ mode: "project", view: "list" });
+  expect(journeyStage(modeRoute("project", null))).toBe("connect");
+  expect(journeyStage(modeRoute("instrument", 7))).toBe("mods");
+  expect(journeyStage(modeRoute("analysis", 7))).toBe("inspect");
+});
+
+test("first-run process choices hide system noise and prioritize saved games", () => {
+  const rows = [
+    { pid: 1, name: "system-daemon", matchedTargets: [], suggestedAction: "probe" as const },
+    { pid: 2, name: "Terraria.exe", matchedTargets: ["terraria"], suggestedAction: "attach-target" as const },
+    { pid: 3, name: "Another Game", matchedTargets: [], suggestedAction: "probe" as const },
+  ];
+  expect(processChoices(rows, "", true).map((row) => row.pid)).toEqual([2]);
+  expect(processChoices(rows, "game", true).map((row) => row.pid)).toEqual([3]);
+  expect(processChoices(rows, "", false).map((row) => row.pid)).toEqual([2, 1, 3]);
 });
 
 test("captured text input permits only global quit", () => {

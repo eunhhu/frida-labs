@@ -638,12 +638,40 @@ export const commands: Command[] = [
 ];
 
 export function renderHelp(): string {
-  const lines = ["flab — cross-game Frida workspace tool", "", "commands:"];
-  for (const command of commands) {
-    lines.push(`  ${command.usage}`);
-    lines.push(`      ${command.summary}`);
+  const byName = new Map(commands.map((command) => [command.name, command]));
+  const group = (title: string, names: readonly string[], lines: string[]): void => {
+    lines.push(title);
+    for (const name of names) {
+      const command = byName.get(name)!;
+      lines.push(`  ${name.padEnd(14)} ${command.summary}`);
+    }
+    lines.push("");
+  };
+  const lines = [
+    "flab — connect, inspect, and mod an authorized offline/single-player game",
+    "",
+    "start here:",
+    "  flab                  open the guided Connect → Mods → Inspect TUI",
+    "  flab doctor           verify Frida and the selected device",
+    "  flab --help           show this page",
+    "",
+  ];
+  group("connect and use:", ["devices", "processes", "run", "probe"], lines);
+  group("saved games:", ["targets", "new", "target", "build"], lines);
+  group("agent and developer tools:", ["capabilities", "lib", "depcheck", "doctor"], lines);
+  lines.push("details:");
+  lines.push("  flab <command> --help  command usage and options");
+  lines.push("  flab tui [target]      open the TUI; optionally connect a saved game");
+  lines.push("  flab <command> --json  stable machine-readable output");
+  lines.push("  device selectors       --device local|usb|remote|ID or --host HOST:PORT");
+  return lines.join("\n");
+}
+
+export function renderCommandHelp(command: Command): string {
+  const lines = [command.usage, "", command.summary];
+  if (command.detail) lines.push("", command.detail);
+  if (command.allowedFlags.includes("json")) {
+    lines.push("", "Add --json for stable machine-readable output.");
   }
-  lines.push("", "  flab tui [target]      interactive ink UI for humans");
-  lines.push("  flab <cmd> --json      machine-readable output");
   return lines.join("\n");
 }

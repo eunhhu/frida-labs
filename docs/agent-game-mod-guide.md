@@ -8,6 +8,24 @@ Use it only against a game, process, and device you own or are authorized to
 test, preferably offline or single-player. Do not bypass anti-cheat, interfere
 with online play, or affect another user's process or data.
 
+## If you are the game owner, start here
+
+You do **not** need to execute the phases in this document yourself. Give your
+harness these five facts and invoke its `build-game-mod` skill:
+
+```text
+Game: <title>
+Process: <name, bundle id, or positive PID>
+Device: <local, usb, remote, exact id, or host:port>
+Start mode: <attach or spawn>
+Wanted features: <QoL, player, world, inventory, content, ...>
+```
+
+Also state that this is your authorized offline/single-player instance and ask
+the agent to finish live verification and cleanup. The harness commands are
+listed below. Everything after them is the completion contract the agent
+follows; it is reference material, not required reading for basic use.
+
 ## What a completed run produces
 
 A completed run is not just a Frida script. It produces:

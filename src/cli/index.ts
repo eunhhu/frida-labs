@@ -2,6 +2,7 @@
 
 import {
   commands,
+  renderCommandHelp,
   renderHelp,
   targetMutationFailure,
   type CmdCtx,
@@ -63,7 +64,7 @@ export async function runCli(argv: string[], io: CliIo = consoleIo): Promise<num
     return 2;
   }
 
-  if (!cmdName || cmdName === "help" || flags.help) {
+  if (!cmdName || cmdName === "help") {
     if (ctx.json) {
       ctx.out(JSON.stringify({
         commands: commands.map(({ name, usage, summary, detail, allowedFlags }) => ({
@@ -76,7 +77,7 @@ export async function runCli(argv: string[], io: CliIo = consoleIo): Promise<num
         tui: "flab tui [target]",
       }));
     } else ctx.out(renderHelp());
-    return cmdName ? 0 : 2;
+    return 0;
   }
 
   const cmd = commands.find((candidate) => candidate.name === cmdName);
@@ -85,6 +86,21 @@ export async function runCli(argv: string[], io: CliIo = consoleIo): Promise<num
     if (ctx.json) writeFailure(ctx, undefined, "unknown-command", message);
     else ctx.err(`${message}\n\n${renderHelp()}`);
     return 2;
+  }
+
+  if (flags.help) {
+    if (ctx.json) {
+      ctx.out(JSON.stringify({
+        name: cmd.name,
+        usage: cmd.usage,
+        summary: cmd.summary,
+        allowedFlags: cmd.allowedFlags,
+        ...(cmd.detail ? { detail: cmd.detail } : {}),
+      }));
+    } else {
+      ctx.out(renderCommandHelp(cmd));
+    }
+    return 0;
   }
 
   const unsupported = Object.keys(flags).find((flag) => !cmd.allowedFlags.includes(flag));
