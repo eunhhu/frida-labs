@@ -86,7 +86,9 @@ Game: Terraria
 Process: Terraria.exe
 Device: local
 Start mode: attach
-Wanted features: progression, resources, combat, cooldowns, inventory, content, and QoL
+Wanted features: objectives/win-loss, progression, economy/rewards, combat,
+cooldowns, inventory, content, aim assist, ESP/awareness, movement trainer,
+accessibility, training, and QoL
 
 This is my authorized offline/single-player instance. Finish the game-specific
 menu, REPL, persistent AI controls, cleanup, reattach, and live verification.
@@ -104,7 +106,7 @@ Invoke the repository skill with the syntax your harness understands:
 For example:
 
 ```sh
-codex '$build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="progression, resources, combat, inventory, content, QoL"'
+codex '$build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="objectives, progression, economy, combat, aim assist, ESP, movement trainer, content, QoL"'
 ```
 
 The complete copy-paste commands, remote/mobile variants, safety boundary,
@@ -120,7 +122,9 @@ A finished target provides the same game actions through:
 - a readable game-specific menu in `bun run flab -- tui <target>`;
 - a human REPL in `bun run flab -- run <target>`;
 - a persistent agent session in `bun run flab -- run <target> --session --json`;
-- a target-local README with tested commands, features, cleanup, and limits.
+- a target-local README with tested commands, features, cleanup, and limits;
+- an evidence-backed semantic model for win/loss, rewards, economy, entities,
+  persistence, and applicable assist/training surfaces.
 
 ## Common commands
 
@@ -193,13 +197,20 @@ NDJSON-only. The protocol is `flab.ndjson.v1`.
 Targets live in `agent/targets/<game>/index.ts` and are registered in
 `frida-labs.json`. Their `__describe()` metadata drives all three interfaces.
 
-Use short labels and stable categories such as `System`, `Player`, `World`,
-`Inventory`, `Entities`, `Content`, `QoL`, and `Debug`. Mark each action's
+Use short labels and stable categories such as `Objectives`, `Economy`,
+`Player`, `Combat`, `World`, `Inventory`, `Entities`, `Assist`, `Visual`,
+`Movement`, `Training`, `Content`, `QoL`, and `Debug`. Mark each action's
 arguments, read/write effect, return type, and capabilities truthfully.
 
 Required target behavior:
 
 - make game-specific progression/combat/resource/content actions the primary menu when callable paths exist; treat FPS and keep-awake as secondary QoL;
+- map objective/win-loss, reward, economy, persistence, and entity relationships
+  before composing completion or resource mods;
+- consider default-off aim assist, ESP/awareness, reversible movement,
+  accessibility, and training features when the game exposes safe local paths;
+- require explicit offline confirmation and a live engagement gate for
+  continuous assists; do not implement auto-fire;
 - expose real discovery, status, and cleanup actions;
 - keep mutations off by default and validate ranges;
 - capture original state before writes and restore it on reset/detach;

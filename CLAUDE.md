@@ -56,7 +56,7 @@ Two processes, one boundary:
   `tui/index.tsx` (ink) uses the same core SessionEngine, ActionService, and
   ProjectService boundaries. Put shared behavior in core, not in a frontend.
 - **agent/** (frida-gum): runs inside the game. `lib/` is the reusable
-  toolkit (mem, hook, search, mono, ue, il2cpp, detect, watch, strings,
+  toolkit (mem, hook, search, mono, ue, il2cpp, assist, detect, watch, strings,
   cocos); `targets/<name>/` is per-game glue.
 
 Data crosses the boundary as JSON only. `rpc.exports` functions are callable
@@ -107,6 +107,9 @@ For new games, mods/trainers, QoL/content work, or end-to-end attach/spawn
 analysis, read `docs/agent-game-mod-guide.md` and invoke the `build-game-mod`
 project skill. It requires evidence-based subsystem coverage, a descriptor-led
 TUI mod menu, the same REPL/NDJSON action surface, cleanup, and a clean reattach.
+The completion contract includes objective/win-loss and economy/reward semantic
+mapping plus applicable default-off aim assist, ESP/awareness, reversible
+movement, accessibility, and training features for authorized offline play.
 Target-specific user instructions belong in `agent/targets/<name>/README.md`;
 do not add individual-game details to root README/CLAUDE files.
 

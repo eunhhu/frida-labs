@@ -66,7 +66,7 @@ export function localView(W = 1920, H = 1080): View | null {
 
 export interface Screen { x: number; y: number; depth: number; }
 
-export function worldToScreen(view: View, wp: number[]): Screen | null {
+export function worldToScreen(view: View, wp: readonly number[]): Screen | null {
   const d = [wp[0] - view.t[0], wp[1] - view.t[1], wp[2] - view.t[2]];
   const depth = d[0] * view.fwd[0] + d[1] * view.fwd[1] + d[2] * view.fwd[2];
   if (depth <= 1) return null;

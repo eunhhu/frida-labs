@@ -10,5 +10,8 @@ User request: $ARGUMENTS
 
 Do not stop after recon, planning, or scaffolding. Implement and verify the TUI
 menu, REPL, persistent AI action surface, cleanup/reattach path, coverage report,
-and target-local usage. Work only against an authorized offline/single-player
-instance; do not bypass anti-cheat or affect online play.
+objectives/win-loss and economy/reward semantic model, discovered aim assist,
+ESP/awareness, movement trainer and accessibility/training features, and
+target-local usage. Continuous assists require an engagement gate and explicit
+offline confirmation; never add auto-fire. Work only against an authorized
+offline/single-player instance; do not bypass anti-cheat or affect online play.

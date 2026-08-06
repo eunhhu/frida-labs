@@ -1,6 +1,6 @@
 // frida-labs library — cross-game debugging utilities + the shared UE toolkit
 // (game-specific data stays config-driven in ue/esp.ts).
-// Import in any target: `import { modules, exports, trace, ue } from "../../lib/index.js";`
+// Import in any target: `import { modules, exports, trace, assist, ue } from "../../lib/index.js";`
 //
 // Side-effect invariant: importing this barrel must never touch the target
 // process — every module, `ue` included, defers all process access to first
@@ -11,6 +11,7 @@
 // gates: their modules export pure functions and require() the bridge only on
 // first api() call, so re-exporting them is side-effect free.
 export * as mem from "./mem.js";
+export * as assist from "./assist.js";
 export * as ue from "./ue/index.js";
 export * as stalker from "./stalker.js";
 export * as mam from "./mam.js";

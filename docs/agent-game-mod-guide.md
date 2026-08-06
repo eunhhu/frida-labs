@@ -18,7 +18,9 @@ Game: <title>
 Process: <name, bundle id, or positive PID>
 Device: <local, usb, remote, exact id, or host:port>
 Start mode: <attach or spawn>
-Wanted features: <completion/progression, resources, combat, cooldowns, inventory, content, QoL, ...>
+Wanted features: <objectives/win-loss, completion/progression, economy/rewards,
+combat, cooldowns, inventory, content, aim assist, ESP/awareness, movement
+trainer, accessibility, training, QoL, ...>
 ```
 
 Also state that this is your authorized offline/single-player instance and ask
@@ -38,7 +40,10 @@ A completed run is not just a Frida script. It produces:
    `flab run <slug> --session --json`.
 5. `agent/targets/<slug>/README.md` with exact launch commands, feature catalog,
    coverage matrix, cleanup, and limitations.
-6. Local recon and verification receipts under `artifacts/<slug>/`.
+6. `artifacts/<slug>/semantic-model.json` mapping objectives, win/loss,
+   rewards, local economy, persistence, entities, and assist/training surfaces.
+7. Local recon, controlled-experiment, and verification receipts under
+   `artifacts/<slug>/`.
 
 The menu, REPL, and AI protocol are three views of one `rpc.exports` surface.
 Do not implement separate feature sets for each frontend.
@@ -63,13 +68,17 @@ Replace every value in braces:
 ```text
 Build a verified game-specific mod for GAME={game title}, PROCESS={process name,
 bundle id, or positive PID}, DEVICE={local|usb|remote|device id|host:port},
-MODE={attach|spawn}. Desired priorities: {completion/progression/resources/combat/
-cooldowns/inventory/entities/content/QoL features}. Use only my authorized offline or single-player instance.
+MODE={attach|spawn}. Desired priorities: {objectives/win-loss/completion/progression/
+economy/rewards/combat/cooldowns/inventory/entities/content/aim assist/ESP/
+movement trainer/accessibility/training/QoL features}. Use only my authorized
+offline or single-player instance.
 Follow docs/agent-game-mod-guide.md and the build-game-mod skill. Do not stop at
 recon or scaffolding: implement the descriptor-driven TUI menu, REPL, and AI
 session surface; exercise every shipped action against the live target; restore
 state on cleanup; write the per-target usage and coverage report. If a subsystem
 cannot be reached safely, report the evidence and limitation instead of guessing.
+For continuous assists, require a discovered local engagement gate and explicit
+offline confirmation; keep them off by default and do not implement auto-fire.
 ```
 
 Prefer an interactive harness for first-time live attach work. The game may
@@ -89,19 +98,19 @@ This repository enables its project skill in `.gjc/config.yml`. Start an
 interactive run with an initial skill invocation:
 
 ```sh
-gjc '/skill:build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="QoL, player, world, content"'
+gjc '/skill:build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="objectives, economy, combat, aim assist, ESP, movement trainer, content"'
 ```
 
 Inside an existing GJC session, type:
 
 ```text
-/skill:build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="QoL, player, world, content"
+/skill:build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="objectives, economy, combat, aim assist, ESP, movement trainer, content"
 ```
 
 For a one-shot/headless run:
 
 ```sh
-gjc -p '/skill:build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="QoL, player, world, content"'
+gjc -p '/skill:build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="objectives, economy, combat, aim assist, ESP, movement trainer, content"'
 ```
 
 Use `gjc --tmux '...'` when the outer coding-agent session must survive a
@@ -113,7 +122,7 @@ instrumentation session inside it.
 Codex discovers `.agents/skills/build-game-mod/SKILL.md`. Start interactively:
 
 ```sh
-codex '$build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="QoL, player, world, content"'
+codex '$build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="objectives, economy, combat, aim assist, ESP, movement trainer, content"'
 ```
 
 Inside an existing task, mention `$build-game-mod` and the same parameters.
@@ -123,7 +132,7 @@ paste the complete request above.
 For non-interactive automation that may edit the workspace:
 
 ```sh
-codex exec --sandbox workspace-write '$build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="QoL, player, world, content"'
+codex exec --sandbox workspace-write '$build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="objectives, economy, combat, aim assist, ESP, movement trainer, content"'
 ```
 
 `codex exec` defaults to a read-only sandbox. Live process attach may also be
@@ -137,14 +146,14 @@ Claude Code discovers `.claude/skills/build-game-mod/SKILL.md` and the root
 `CLAUDE.md`:
 
 ```sh
-claude '/build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="QoL, player, world, content"'
+claude '/build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="objectives, economy, combat, aim assist, ESP, movement trainer, content"'
 ```
 
 Inside an existing session, type the same `/build-game-mod ...` command. A
 headless run is:
 
 ```sh
-claude -p '/build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="QoL, player, world, content"'
+claude -p '/build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="objectives, economy, combat, aim assist, ESP, movement trainer, content"'
 ```
 
 Use an interactive run when attach commands require approval or the game must
@@ -163,13 +172,13 @@ opencode
 Then type:
 
 ```text
-/game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="QoL, player, world, content"
+/game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="objectives, economy, combat, aim assist, ESP, movement trainer, content"
 ```
 
 For non-interactive use:
 
 ```sh
-opencode run 'Use the build-game-mod project skill. GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="QoL, player, world, content". Complete live verification and the target-local guide.'
+opencode run 'Use the build-game-mod project skill. GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="objectives, economy, combat, aim assist, ESP, movement trainer, content". Complete live verification and the target-local guide.'
 ```
 
 Use the Build agent, not the read-only Plan agent, when implementation is
@@ -238,7 +247,12 @@ then call `describe`:
 {"id":"2","op":"describe"}
 {"id":"3","op":"action","mode":"analysis","action":"engines","args":[],"offset":0}
 {"id":"4","op":"action","mode":"analysis","action":"modules","args":[""],"offset":0}
+{"id":"5","op":"action","mode":"analysis","action":"memorySnapshot","args":["0xADDRESS","256"],"offset":0}
+{"id":"6","op":"action","mode":"analysis","action":"memoryDiff","args":["snap-1"],"offset":0}
+{"id":"7","op":"action","mode":"instrument","action":"memorySnapshotDelete","args":["snap-1"],"offset":0}
 ```
+
+Use the actual id returned by `memorySnapshot`; never assume `snap-1`.
 
 Keep this process alive while mapping addresses and managed objects. Stable
 instrument ids exist only inside that session. Close it explicitly:
@@ -251,17 +265,31 @@ If the coding harness cannot keep stdin open, use bounded one-shot probe calls
 for initial facts, then move to a harness terminal/PTY for lifecycle testing.
 Do not substitute the human TUI for a machine protocol parser.
 
+The generic probe establishes identity, runtime, modules, strings, symbols,
+hooks, and state-diff candidates; it is not full semantic coverage. After the
+engine is confirmed, continue discovery through one game target importing the
+appropriate IL2CPP, Mono, UE, Java, ObjC, Cocos, or native library. Expose
+bounded read-only discovery actions while mapping, then keep only useful,
+truthful actions in the finished menu.
+
 ### Phase 3: build an evidence-based subsystem map
 
 Inventory every discoverable subsystem before choosing mod actions. At minimum
 consider:
 
 - engine/runtime, modules, assemblies/images, classes, methods, fields, exports;
+- objectives, rules, win condition, defeat condition, completion gates, retries,
+  checkpoints, stage transitions, reward grants, and post-match/save commits;
+- every local economy/currency type, wallet, cap, source, sink, exchange,
+  purchase-free unlock path, reward multiplier, serialization, and authority;
 - player state, movement, combat, health/resources, progression, and skills;
 - inventory, equipment, items, loot, crafting, and recipes;
 - world, levels/scenes, time, weather, environment, and physics;
 - actors/entities, NPCs, enemies, spawners, AI, and quests/events;
-- input, camera, UI/HUD, audio, localization, and save/config state;
+- input, camera, aim/control rotation, team/hostility, visibility/occlusion,
+  UI/HUD, ESP/awareness rendering, audio, localization, and save/config state;
+- movement modes, speed/acceleration/jump/gravity/air control, traversal,
+  accessibility controls, training feedback, and practice/dummy systems;
 - repeatable QoL opportunities and safe content-extension points.
 
 For each row record `discovered`, `read`, `modify`, `create/content`, `restore`,
@@ -269,17 +297,79 @@ and `live-verified` evidence. “All game elements” means a complete catalog o
 what the live build exposes plus explicit unsupported rows. It does not mean
 inventing offsets, claiming hidden coverage, or shipping unsafe writes.
 
+Write `artifacts/<slug>/semantic-model.json` with schema
+`flab.game-model.v1`. Keep it bounded and include:
+
+- `objectives`: state, prerequisites, win/loss transitions, trigger path,
+  reward path, persistence path, reset/retry path, evidence, and confidence;
+- `economies`: currency/resource id, local/server authority, getter/setter or
+  save path, cap, sources, sinks, reward links, restore strategy, and evidence;
+- `entities`: player/team/hostility/life/visibility/target-point evidence and
+  factories/spawners when present;
+- `assists`: aim, ESP/awareness, movement, accessibility, and training paths,
+  activation gate, bounds, cleanup, unsupported rows, and live evidence;
+- `experiments`: scene/build, controlled action, before/after observation,
+  address/member/call path, outcome, counterexample, confidence, and receipt id.
+
+Minimal shape:
+
+```json
+{
+  "schema": "flab.game-model.v1",
+  "target": { "game": "...", "build": "...", "deviceId": "..." },
+  "objectives": [],
+  "economies": [],
+  "entities": [],
+  "assists": [],
+  "experiments": [],
+  "unsupported": []
+}
+```
+
+### Required semantic discovery loop
+
+Do not infer a mechanic from a promising name alone. For each high-value
+hypothesis, run a controlled loop on the same device and scene:
+
+1. Capture a read-only baseline: game state, relevant managed fields/save keys,
+   and bounded memory snapshots.
+2. Trigger exactly one natural event, such as one kill, spend, pickup, wave end,
+   victory, defeat, jump, aim movement, or visibility transition.
+3. Diff state, then narrow candidates with managed reflection, strings/symbols,
+   memory write watch plus backtrace, and function argument/return tracing.
+4. Trace both directions: cause → state transition → reward/save, and direct
+   state/API change → HUD/gameplay/persistence effect.
+5. Repeat a positive case, negative/counterexample case, cleanup, and reattach.
+   Record confidence as `confirmed`, `partial`, or `unsupported`.
+
+For an objective, finding only a `won` boolean is insufficient: map the
+prerequisite, authoritative transition, reward grant, progression update, and
+save/reload behavior. For an economy, finding only a displayed number is
+insufficient: distinguish wallet, presentation proxy, source/sink, cap,
+serialization, and local versus server authority.
+
 Prioritize controls that change the game's core loop: level/progression caps,
 stage or wave advancement, local score/resources, health/damage, skill or item
-cooldowns, inventory/equipment, spawns, and game-specific content systems.
+cooldowns, inventory/equipment, spawns, game-specific content systems, and
+bounded accessibility/training assists that materially reduce execution burden.
 Frame-rate meters, keep-awake, and generic discovery are supporting tools, not
 a completed mod menu when callable gameplay functions or state were found.
 Do not force the same feature list onto every title: map each requested outcome
 to that game's actual functions, fields, proxies, factories, or save schema.
 
+When the live game exposes the required paths, synthesize a small coherent set
+instead of isolated debug toggles: `objectiveCompleteCurrent`, `waveSkip`,
+`rewardSetMultiplier`, `economyRead/economySet`, `aimAssistSet`,
+`espSet/espSnapshot`, and named movement-training profiles. Preserve the game's
+state invariants: a completion action must not silently skip required reward or
+save transitions, and irreversible one-shot progress must be labeled as such.
+
 Use existing engine libraries instead of rebuilding them in the target:
 
 - Unreal: `agent/lib/ue/`
+- Engine-neutral aim selection/smoothing: `agent/lib/assist.ts`
+- Configurable UE aim, ESP, and reversible movement trainers:
+  `agent/lib/ue/aim.ts`, `agent/lib/ue/esp.ts`, `agent/lib/ue/movement.ts`
 - Unity IL2CPP: `agent/lib/il2cpp.ts`
 - Unity Mono or FNA/Mono: `agent/lib/mono/`
 - Android Java: `agent/lib/java.ts`
@@ -309,7 +399,13 @@ Expose these discovery actions unless the runtime makes one inapplicable:
 - `modHelp()` — categories, actions, examples, risks, and reset command.
 - `modState()` — enabled toggles, owned handles, and restoration state.
 - domain reads and controls such as `playerRead`, `playerSet`, `worldRead`,
-  `inventoryGive`, `entitySpawn`, `qolSet`, and `contentStart`.
+  `objectiveRead`, `objectiveCompleteCurrent`, `economyRead`, `economySet`,
+  `rewardSetMultiplier`, `inventoryGive`, `entitySpawn`, `qolSet`, and
+  `contentStart`.
+- when discovered and applicable, bounded training actions such as
+  `aimAssistPreview`, `aimAssistSet`, `aimAssistStatus`, `espSnapshot`,
+  `espSet`, `espStatus`, `movementRead`, `movementProfileSet`, and
+  `movementReset`.
 - `resetAll()` or `dispose()` — stop timers/hooks, release handles, and restore
   every value that can be restored safely.
 
@@ -328,9 +424,29 @@ Every callable must appear in the live `__describe()` inventory. Include:
 }
 ```
 
-Use short labels and stable categories such as `System`, `Player`, `World`,
-`Inventory`, `Entities`, `Content`, `QoL`, and `Debug`. The TUI shows the
-category and label; the REPL and machine protocol retain the stable `name`.
+Continuous assistance uses an explicit lifecycle rather than a hidden toggle:
+
+```ts
+{
+  name: "aimAssistSet",
+  label: "Toggle bounded aim assistance",
+  category: "Assist",
+  args: [
+    { name: "enabled", type: "boolean" },
+    { name: "offlineConfirmed", type: "boolean" },
+  ],
+  doc: "Requires a verified hostile/visibility/input path; disable and resetAll stop its owned timer.",
+  capabilities: ["instrument"],
+  effect: "control",
+  returns: "json",
+  statusAction: "aimAssistStatus",
+}
+```
+
+Use short labels and stable categories such as `Start here`, `Objectives`,
+`Economy`, `Player`, `Combat`, `World`, `Inventory`, `Entities`, `Assist`,
+`Visual`, `Movement`, `Training`, `Content`, `QoL`, and `Debug`. The TUI shows
+the category and label; the REPL and machine protocol retain the stable `name`.
 
 Implementation invariants:
 
@@ -341,6 +457,22 @@ Implementation invariants:
   verification-returning action when a read-only status action exists.
 - Default mutations off. Validate ranges and reject ambiguous or destructive
   inputs.
+- Require `offlineConfirmed=true` for irreversible progress and continuous
+  assistance. Never infer authorization from airplane mode alone.
+- Aim assist must positively classify hostility, reject dead/friendly/unknown
+  entities, bound angular FOV and distance, expose smoothing, and act only while
+  a discovered local engagement gate is active. Visibility-required mode must
+  fail closed when occlusion evidence is unavailable. Do not add auto-fire.
+- ESP/awareness must bound entity count and refresh rate, exclude self, label
+  team/hostility and alive state truthfully, and report visibility as `unknown`
+  unless a line-of-sight path was verified. Overlay removal must detach its
+  render hook and timer.
+- Movement trainers must capture the live original component values before the
+  first write, survive respawn by re-resolving components, bound every profile,
+  and restore captured values rather than assumed engine defaults.
+- Economy controls must identify local versus remote authority and preserve
+  dependent counters/checksums/save invariants. Premium purchase, leaderboard,
+  remote-wallet, or server-state paths remain out of scope.
 - Capture original state before the first write; make repeated enable/disable
   calls idempotent; restore on disable, reload, detach, and `dispose()`.
 - Own every hook, timer, watch, and freeze with a handle. Never leak callbacks
@@ -377,6 +509,19 @@ flab run <slug> --host <host:port>
 Run `:exports`, `await modInfo()`, `await modHelp()`, and `await modState()`.
 Exercise every shipped action with a safe value and confirm its reset/disable
 path.
+
+Verify domain semantics, not only RPC success:
+
+- objectives: natural positive and negative outcomes, mod-triggered transition,
+  reward/progression update, save/reload result, and irreversible labeling;
+- economy: read, bounded write or multiplier, HUD/gameplay readback, one natural
+  source and sink when safely reachable, reset, and persistence behavior;
+- aim assist: friendly/dead/hidden/out-of-FOV rejection, one eligible target,
+  smoothing, engagement-gate release, disable, and clean reattach;
+- ESP/awareness: self exclusion, entity cap, team/hostility labels, honest
+  visibility state, overlay removal, and no duplicate render hook;
+- movement trainer: apply/readback, respawn or component change when reachable,
+  enforcement disable, exact original restoration, and clean reattach.
 
 Live TUI menu:
 
@@ -424,23 +569,32 @@ Do not hard-code `ins-1`; consume the id returned by `instrumentStart`.
 2. Close the session and confirm the game remains responsive.
 3. Reattach once and verify `modState()` starts clean with no duplicate hooks.
 4. Test process restart or respawn when the target supports spawn.
-5. Store bounded runtime receipts under `artifacts/<slug>/verification.json`.
-6. Write `agent/targets/<slug>/README.md` with copy-paste commands for local,
+5. Finalize `artifacts/<slug>/semantic-model.json`; every `confirmed` row must
+   cite a bounded experiment or verification receipt.
+6. Store bounded runtime receipts under `artifacts/<slug>/verification.json`.
+7. Write `agent/targets/<slug>/README.md` with copy-paste commands for local,
    USB/exact-device, and remote endpoint use; feature examples; the coverage
-   matrix; cleanup; tested build/device; and limitations.
+   and semantic matrices; assist activation and safety behavior; cleanup;
+   tested build/device; and limitations.
 
 ## Definition of done
 
 - [ ] Exact device and process identity recorded.
 - [ ] Recon covers every subsystem category or marks it unsupported.
+- [ ] Objective/win-loss, reward, economy, persistence, entity, and assist
+      semantics are recorded in `semantic-model.json` with evidence/confidence.
 - [ ] Target registered and imports only from `agent/lib/`.
 - [ ] `modInfo`, `modHelp`, `modState`, and cleanup are real, not stubs.
 - [ ] Core gameplay/progression actions dominate the menu; generic FPS/QoL is secondary.
+- [ ] Applicable aim assist, ESP/awareness, movement, accessibility, and training
+      candidates are shipped and live-verified or explicitly marked unsupported.
 - [ ] Every callable has truthful descriptor metadata.
 - [ ] TUI presents a readable game-specific menu.
 - [ ] REPL discovery and calls work.
 - [ ] Persistent NDJSON control works on the same device.
 - [ ] Every mutation has a tested reset/disable path.
+- [ ] Continuous assists are default-off, engagement-gated, bounded, explicitly
+      offline-confirmed, cleanly removable, and contain no auto-fire.
 - [ ] Build, typecheck, depcheck, and tests pass.
 - [ ] Live attach/spawn, actions, cleanup, and reattach are evidenced.
 - [ ] Target-local usage and coverage guide is complete.

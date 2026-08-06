@@ -3,7 +3,8 @@
 //
 // Injects without any per-game config, detects the engine/managed runtime,
 // and exposes the matching exploration surface over rpc.exports:
-//   - always: modules, exports, scan, strings, peek/poke/freeze/watch, trace
+//   - always: modules/imports/exports/symbols, scan, strings, bounded memory
+//             snapshots/diffs, peek/poke/freeze/watch, trace
 //   - Unity Mono:   mono assemblies/classes/methods/invoke
 //   - Cocos2d-x:    cocos symbol browse
 //
@@ -32,12 +33,15 @@ if (engines.length === 0) ok("_probe: no known engine detected — native-only s
 else for (const e of engines) ok(`_probe: detected ${e.label} @ ${e.module.name}`);
 
 const freezes = new Map<string, watchlib.FreezeHandle>();
+const snapshots = new Map<string, { address: NativePointer; bytes: ArrayBuffer; length: number }>();
+let nextSnapshotId = 1;
 let rpcSurface: RpcExports = {};
 
 function stopEverything(): instruments.InstrumentResult {
   const result = instruments.instrumentStopAll();
   for (const handle of freezes.values()) handle.stop();
   freezes.clear();
+  snapshots.clear();
   hook.detachAll();
   watchlib.unwatchAll();
   return result;
@@ -51,12 +55,54 @@ const base = {
   exports(q: string, mod?: string) {
     return search.exports(q, mod).map((e) => `${(e as { module?: Module }).module?.name ?? "?"}!${e.name} @ ${e.address}`);
   },
+  imports(q: string, mod: string) {
+    return search.imports(q, mod).slice(0, 500).map((entry) => ({
+      name: entry.name,
+      type: entry.type,
+      address: entry.address?.toString() ?? null,
+      module: entry.module ?? null,
+    }));
+  },
+  symbols(q: string, mod: string) {
+    return search.symbols(q, mod).slice(0, 500).map((entry) => ({
+      name: entry.name,
+      address: entry.address.toString(),
+      size: entry.size,
+    }));
+  },
   scan(pattern: string, modName?: string) {
     const m = modName ? Process.getModuleByName(modName) : mem.mainModule();
     return mem.scan(pattern, m).map((a) => a.toString());
   },
   strings(q: string, cap?: number) { return stringslib.strings(q, { cap }); },
   hexdump(addr: string, len?: number) { return mem.dump(ptr(addr), len ?? 128); },
+  memorySnapshot(addr: string, len = 256) {
+    if (!Number.isInteger(len) || len < 1 || len > 4096) throw new Error("len must be an integer within 1..4096");
+    const address = ptr(addr);
+    const bytes = watchlib.snapshot(address, len);
+    if (!bytes) throw new Error(`cannot read ${len} byte(s) at ${addr}`);
+    while (snapshots.size >= 32) snapshots.delete(snapshots.keys().next().value!);
+    const id = `snap-${nextSnapshotId++}`;
+    snapshots.set(id, { address, bytes, length: len });
+    return { id, address: address.toString(), length: len };
+  },
+  memoryDiff(id: string) {
+    const record = snapshots.get(id);
+    if (!record) throw new Error(`snapshot ${JSON.stringify(id)} does not exist`);
+    const changes = watchlib.diff(record.bytes, record.address, record.length);
+    return {
+      id,
+      address: record.address.toString(),
+      length: record.length,
+      changed: changes.length,
+      changes: changes.slice(0, 512),
+      truncated: changes.length > 512,
+    };
+  },
+  memorySnapshotList() {
+    return [...snapshots].map(([id, record]) => ({ id, address: record.address.toString(), length: record.length }));
+  },
+  memorySnapshotDelete(id: string) { return { deleted: snapshots.delete(id), id }; },
   peek(addr: string, type?: watchlib.WatchType) { return watchlib.peek(ptr(addr), type); },
   poke(addr: string, value: number, type?: watchlib.WatchType) { return watchlib.poke(ptr(addr), value, type); },
   freeze(addr: string, value: number, type?: watchlib.WatchType): string {
@@ -150,9 +196,15 @@ const base = {
       { name: "engines", doc: "Detected engines/managed runtimes", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
       { name: "modules", args: [{ name: "q", type: "string" }], doc: "Modules matching substring", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
       { name: "exports", args: [{ name: "q", type: "string" }, { name: "mod", type: "string?" }], doc: "Exports matching substring", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
+      { name: "imports", label: "Search imported functions", category: "Discovery", args: [{ name: "q", type: "string" }, { name: "mod", type: "string" }], doc: "Bounded imports matching a substring in one module", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
+      { name: "symbols", label: "Search debug symbols", category: "Discovery", args: [{ name: "q", type: "string" }, { name: "mod", type: "string" }], doc: "Bounded symbols matching a substring in one module", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
       { name: "scan", args: [{ name: "pattern", type: "pattern" }, { name: "modName", type: "string?" }], doc: "Byte-pattern scan", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
       { name: "strings", args: [{ name: "q", type: "string" }, { name: "cap", type: "integer?" }], doc: "String search", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
       { name: "hexdump", args: [{ name: "addr", type: "address" }, { name: "len", type: "integer?" }], capabilities: ["instrument", "analysis"], effect: "read", returns: "hex" },
+      { name: "memorySnapshot", label: "Capture a memory baseline", category: "State diff", args: [{ name: "addr", type: "address" }, { name: "len", type: "integer?" }], doc: "Capture 1..4096 bytes under a stable session id; at most 32 baselines", capabilities: ["instrument", "analysis"], effect: "read", returns: "json", statusAction: "memorySnapshotList" },
+      { name: "memoryDiff", label: "Compare with a baseline", category: "State diff", args: [{ name: "id", type: "string" }], doc: "Compare current memory with one captured baseline; returns at most 512 changes", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
+      { name: "memorySnapshotList", label: "List memory baselines", category: "State diff", doc: "List session-owned memory baselines", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
+      { name: "memorySnapshotDelete", label: "Delete a memory baseline", category: "State diff", args: [{ name: "id", type: "string" }], doc: "Delete one session-owned baseline", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "memorySnapshotList" },
       { name: "peek", args: [{ name: "addr", type: "address" }, { name: "type", type: "string?" }], capabilities: ["instrument", "analysis"], effect: "read", returns: "scalar" },
       { name: "poke", args: [{ name: "addr", type: "address" }, { name: "value", type: "number" }, { name: "type", type: "string?" }], capabilities: ["instrument"], effect: "write", returns: "scalar" },
       { name: "freeze", args: [{ name: "addr", type: "address" }, { name: "value", type: "number" }, { name: "type", type: "string?" }], capabilities: ["instrument"], effect: "write", returns: "scalar" },

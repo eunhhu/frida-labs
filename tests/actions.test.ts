@@ -648,10 +648,12 @@ function descriptorInventory(): DescriptorExpectation[] {
 
 test("all target and scaffold descriptors match the approved capability/effect inventory", () => {
   const expectations: DescriptorExpectation[] = [
-    ...entries("probe", ["instrument", "analysis"], "read", "table", ["engines", "modules", "exports", "scan", "strings", "monoAssemblies", "monoClasses", "monoMethods", "cocosSymbols"]),
+    ...entries("probe", ["instrument", "analysis"], "read", "table", ["engines", "modules", "exports", "imports", "symbols", "scan", "strings", "memoryDiff", "memorySnapshotList", "monoAssemblies", "monoClasses", "monoMethods", "cocosSymbols"]),
     ...entries("probe", ["instrument", "analysis"], "read", "hex", ["hexdump"]),
     ...entries("probe", ["instrument", "analysis"], "read", "scalar", ["peek"]),
     ...entries("probe", ["instrument", "analysis"], "read", "json", ["demoSym", "demoObjcGate", "demoJavaGate"]),
+    { source: "probe", name: "memorySnapshot", capabilities: ["instrument", "analysis"], effect: "read", returns: "json", statusAction: "memorySnapshotList" },
+    { source: "probe", name: "memorySnapshotDelete", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "memorySnapshotList" },
     ...entries("probe", ["instrument"], "write", "scalar", ["poke", "freeze"]),
     ...entries("probe", ["instrument"], "control", "scalar", ["unfreeze", "detachAll"]),
     ...entries("probe", ["instrument"], "hook", "scalar", ["watch", "trace", "monoTrace"]),
@@ -671,13 +673,17 @@ test("all target and scaffold descriptors match the approved capability/effect i
     ...entries("terraria", ["instrument"], "write", "scalar", ["cmd", "set"]),
     ...entries("terraria", ["instrument", "debug"], "control", "scalar", ["dispose"]),
     ...entries("piu", ["instrument"], "write", "scalar", ["toggle"]),
-    ...entries("meccha", ["instrument", "analysis"], "read", "json", ["info", "espStatus", "moveRead"]),
-    ...entries("meccha", ["instrument", "analysis"], "read", "table", ["classes", "espSnapshot"]),
+    ...entries("meccha", ["instrument", "analysis"], "read", "json", ["modInfo", "modState", "info", "espStatus", "moveRead", "moveStatus"]),
+    ...entries("meccha", ["instrument", "analysis"], "read", "table", ["modHelp", "classes", "espSnapshot"]),
     { source: "meccha", name: "espInstall", capabilities: ["instrument", "debug"], effect: "hook", returns: "scalar", statusAction: "espStatus" },
-    ...entries("meccha", ["instrument", "debug"], "control", "scalar", ["espRemove", "espTest"]),
-    ...entries("meccha", ["instrument"], "write", "json", ["moveApply", "moveReset"]),
-    ...entries("meccha", ["instrument"], "write", "scalar", ["moveFly"]),
-    ...entries("meccha", ["instrument"], "control", "scalar", ["moveEnforce"]),
+    { source: "meccha", name: "espRemove", capabilities: ["instrument", "debug"], effect: "control", returns: "scalar", statusAction: "espStatus" },
+    { source: "meccha", name: "espTest", capabilities: ["instrument", "debug"], effect: "control", returns: "scalar", statusAction: "espStatus" },
+    { source: "meccha", name: "moveApply", capabilities: ["instrument"], effect: "write", returns: "json", statusAction: "moveStatus" },
+    { source: "meccha", name: "moveFly", capabilities: ["instrument"], effect: "write", returns: "json", statusAction: "moveStatus" },
+    { source: "meccha", name: "moveEnforce", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "moveStatus" },
+    { source: "meccha", name: "moveReset", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "moveStatus" },
+    { source: "meccha", name: "resetAll", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
+    { source: "meccha", name: "dispose", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
     ...entries("scaffold", ["instrument", "analysis"], "read", "scalar", ["ping"]),
   ];
 

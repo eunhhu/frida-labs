@@ -23,6 +23,15 @@ test("every coding harness resolves the same game-mod completion contract", () =
     "instrumentStart",
     "LIVE VERIFICATION BLOCKED",
     "agent/targets/<slug>/README.md",
+    "win condition",
+    "economy",
+    "reward",
+    "semantic-model.json",
+    "aim assist",
+    "ESP/awareness",
+    "movement trainer",
+    "memory write watch",
+    "auto-fire",
   ]) {
     expect(guide).toContain(phrase);
   }
@@ -35,6 +44,11 @@ test("every coding harness resolves the same game-mod completion contract", () =
     expect(skill).toContain("REPL");
     expect(skill).toContain("NDJSON");
     expect(skill).toContain("LIVE VERIFICATION BLOCKED");
+    expect(skill).toContain("win-loss");
+    expect(skill).toContain("economy/reward");
+    expect(skill).toContain("aim assist");
+    expect(skill).toContain("ESP/awareness");
+    expect(skill).toContain("movement trainer");
     expect(skill).not.toContain("TODO");
   }
 });
@@ -55,6 +69,9 @@ test("harness-native invocation adapters remain discoverable", () => {
   expect(openCode).toContain("agent: build");
   expect(openCode).toContain("$ARGUMENTS");
   expect(openCode).toContain("build-game-mod");
+  expect(openCode).toContain("win-loss");
+  expect(openCode).toContain("aim assist");
+  expect(openCode).toContain("offline confirmation");
 
   const ignore = read(".gitignore");
   expect(ignore).toContain("!.gjc/config.yml");
