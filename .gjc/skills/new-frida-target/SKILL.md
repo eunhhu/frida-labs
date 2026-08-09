@@ -31,7 +31,10 @@ you have not already.
    must remain. `target delete <name> --confirm <name>` is the distinct
    destructive operation. Never edit source and manifest as separate lifecycle
    operations.
-3. **Implement `rpc.exports`.** Keep the target file game-specific. Reuse
+3. **Declare the Instrument once.** Use `defineInstrument()` with
+   `read`/`write`/`control`/`hook` and `field.*`; it generates both
+   `rpc.exports` and `__describe()`. Never hand-maintain parallel handler and
+   descriptor inventories. Keep the target file game-specific. Reuse
    `agent/lib/` modules:
    - UE game → `import { ok, ue } from "../../lib/index.js"` (the barrel and
      UE accessors are side-effect-free/lazy)
@@ -43,11 +46,11 @@ you have not already.
      `../../lib/search.js` plus `../../lib/log.js`
    If the runtime bridge you need does not exist yet, add it under
    `agent/lib/<engine>/` and keep it game-agnostic.
-   Every callable descriptor must include truthful `capabilities`, `effect`,
-   and `returns` metadata. `__describe()` is mandatory and must return the live
-   callable inventory; host authorization fails closed when it is absent or
-   malformed. Grant `analysis` only to genuinely read-only actions; hooks,
-   writes, and controls remain Instrument/Debug-only.
+   Every declared action must include truthful capabilities, effect, returns,
+   label/category, and `field.*` controls. Generated `__describe()` is the live
+   callable inventory; host authorization fails closed when malformed. Grant
+   `analysis` only to genuinely read-only actions; hooks, writes, and controls
+   remain Instrument/Debug-only.
 4. **Verify.** `bun run typecheck`, `flab build <name>`, and `flab depcheck`
    must all pass.
    Do not claim the target works until the bundle compiles. Actual attach

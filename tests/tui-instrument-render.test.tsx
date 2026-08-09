@@ -9,8 +9,8 @@ import { workbench } from "../src/tui/workbench.js";
 
 class TerminalOutput extends Writable {
   readonly isTTY = true;
-  readonly columns = 120;
-  readonly rows = 42;
+  readonly columns = 80;
+  readonly rows = 24;
   text = "";
 
   override _write(chunk: Buffer | string, _encoding: BufferEncoding, done: (error?: Error | null) => void): void {
@@ -49,20 +49,39 @@ test("Instrument panel renders real input, checkbox, slider, and select widgets"
     detail: "fixture",
     logs: [],
     dropped: 0,
-    receipts: [],
+    receipts: [{
+      sessionId: 77,
+      action: "configure",
+      mode: "instrument",
+      status: "passed",
+      startedAt: 1,
+      completedAt: 2,
+      result: { summary: "{\"ok\":true}", rows: [], totalRows: 0, truncated: false },
+      warnings: [],
+    }],
     droppedReceipts: 0,
     debugEvents: [],
     droppedDebugEvents: 0,
     frozen: false,
     describe: [{
       name: "configure",
-      label: "Configure assist",
+      label: "Assist controls",
       category: "Assist",
       args: [
         { name: "query", type: "string", ui: { control: "input", label: "Target", placeholder: "player" } },
         { name: "enabled", type: "boolean", ui: { control: "checkbox", label: "Enabled" } },
         { name: "speed", type: "number", ui: { control: "slider", label: "Speed", min: 0.25, max: 3, step: 0.25, default: 1 } },
-        { name: "profile", type: "string", ui: { control: "select", label: "Profile", options: [{ label: "Safe", value: "safe" }, { label: "Fast", value: "fast" }] } },
+      ],
+      capabilities: ["instrument"],
+      effect: "control",
+      returns: "json",
+      statusAction: "status",
+    }, {
+      name: "profile",
+      label: "Assist profile",
+      category: "Assist",
+      args: [
+        { name: "value", type: "string", ui: { control: "select", label: "Profile", options: [{ label: "Safe", value: "safe" }, { label: "Fast", value: "fast" }] } },
       ],
       capabilities: ["instrument"],
       effect: "control",
@@ -96,7 +115,7 @@ test("Instrument panel renders real input, checkbox, slider, and select widgets"
     },
     call: async (name) => name === "status" ? { enabled: false, profile: "safe", speed: 1 } : { ok: true },
     eval: async () => undefined,
-    rpcNames: () => ["configure", "status"],
+    rpcNames: () => ["configure", "profile", "status"],
     describe: async () => session.describe!,
     close: async () => {},
   };
@@ -113,19 +132,25 @@ test("Instrument panel renders real input, checkbox, slider, and select widgets"
       exitOnCtrlC: false,
     },
   );
+  let firstFrame = "";
+  let finalFrame = "";
   try {
     await instance.waitUntilRenderFlush();
+    await Bun.sleep(60);
+    await instance.waitUntilRenderFlush();
+    const rendered = plain(stdout.text);
+    const frames = rendered.split("Instrument dashboard");
+    firstFrame = `Instrument dashboard${frames[frames.length - 1] ?? ""}`;
     stdin.write("\r");
     await Bun.sleep(40);
     stdin.write("player");
     await Bun.sleep(20);
-    for (let index = 0; index < 3; index++) {
-      stdin.write("\u001b[B");
-      await Bun.sleep(20);
-    }
     stdin.write("\r");
     await Bun.sleep(80);
     await instance.waitUntilRenderFlush();
+    const renderedFinal = plain(stdout.text);
+    const finalFrames = renderedFinal.split("Instrument dashboard");
+    finalFrame = `Instrument dashboard${finalFrames[finalFrames.length - 1] ?? ""}`;
   } finally {
     instance.unmount();
     await instance.waitUntilExit();
@@ -133,11 +158,16 @@ test("Instrument panel renders real input, checkbox, slider, and select widgets"
   }
 
   const output = plain(stdout.text);
-  expect(output).toMatch(/Target\s+> player/);
-  expect(output).toMatch(/Enabled\s+\[ \] off/);
-  expect(output).toMatch(/Speed\s+◀/);
-  expect(output).toMatch(/Profile\s+◀ Safe ▶/);
-  expect(output).toContain("Live state · s refresh");
+  expect(firstFrame).toContain("Instrument dashboard");
+  expect(firstFrame).toContain("Live status · s refresh");
+  expect(firstFrame).toMatch(/Target\s+> player/);
+  expect(firstFrame).toMatch(/Enabled\s+\[ \] off/);
+  expect(firstFrame).toMatch(/Speed\s+◀/);
+  expect(firstFrame).toMatch(/Assist profile\s+◀ Safe ▶/);
+  expect(firstFrame.match(/\[(?:Assist|System)\]/g)?.length).toBe(3);
+  expect(firstFrame.split("\n").length).toBeLessThanOrEqual(24);
   expect(output).toContain("status · 3 result field(s)");
   expect(output).toContain("enabled: false");
+  expect(finalFrame).toContain("Last · PASSED · Assist controls");
+  expect(finalFrame.split("\n").length).toBeLessThanOrEqual(24);
 });

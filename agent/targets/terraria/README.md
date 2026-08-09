@@ -6,14 +6,16 @@ only in a user-owned offline single-player world.
 ## Start
 
 ```sh
-bun src/bin.ts tui terraria --device local
 bun src/bin.ts run terraria --device local
+bun src/bin.ts run terraria --device local --console
 bun src/bin.ts run terraria --host <host:port> --session --json
 ```
 
-Human TUI, advanced console, selected-session JSON, ACP, and MCP all call the same live
+Human dashboard, opt-in advanced console, selected-session JSON, ACP, and MCP all call the same live
 descriptors. Continuous mutations start disabled and require
 `offlineConfirmed=true` when enabled.
+
+Equivalent expert-console calls:
 
 ```js
 await playerSnapshot()

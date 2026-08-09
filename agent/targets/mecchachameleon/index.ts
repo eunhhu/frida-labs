@@ -1,12 +1,13 @@
 // Target entry: MECCHA CHAMELEON (PenguinHotel-Win64-Shipping.exe).
 // Build:  flab build mecchachameleon   (frida-compile -> _agent.js)
-// Drive:  flab run mecchachameleon     (advanced console over rpc.exports)
+// Drive:  flab run mecchachameleon     (human controls + live status)
 //
 // Everything here is game-specific glue; the heavy lifting lives in ../../lib.
 
 import { ok } from "../../lib/log.js";
 import * as ue from "../../lib/ue/index.js";
-import { recordingDescriptors, recordingRpcSurface } from "../../lib/recording.js";
+import { analyze, control, defineInstrument, field, hook, read, write } from "../../lib/instrument.js";
+import { recordingInstrumentActions } from "../../lib/recording.js";
 
 const ACTOR_CLASSES = /Hunter|Survivor|BigPen|AI_Base/;
 const PLAYER_CONTROLLER_CLASS = "BP_PlayerController_cLeon_C";
@@ -152,32 +153,115 @@ function requireOffline(confirmed: boolean | undefined, action: string): void {
   if (confirmed !== true) throw new Error(`${action} requires offlineConfirmed=true`);
 }
 
-// rpc.exports — callable from the host client as `await api.<name>(...)`.
-rpc.exports = {
-  ...recordingRpcSurface(),
-  modInfo() {
-    return {
+rpc.exports = defineInstrument({
+  info: read({
+    label: "About this Instrument",
+    category: "Start here",
+    doc: "Runtime, safety boundary, and unsupported aim path",
+  }, () => ({
       game: "MECCHA CHAMELEON",
       runtime: "Unreal Engine 5 Mover",
       safety: "Authorized offline/single-player training only",
       aimAssist: "not shipped: engagement, visibility, and control paths are not live-verified",
       flight: "not exposed: this build uses Mover rather than CharacterMovementComponent",
-    };
-  },
-  modState() { return { esp: esp.status(), movement: ue.moverMovement.status() }; },
-  info() {
-    return {
+  })),
+  state: read({
+    label: "Active changes",
+    category: "Start here",
+    doc: "Owned overlay and movement state",
+  }, () => ({ esp: esp.status(), movement: ue.moverMovement.status() })),
+  actions: {
+    espInstall: hook({
+      label: "Awareness overlay",
+      category: "Visual",
+      args: [field.offline()],
+      doc: "Install the owned ESP render hook in an explicitly confirmed offline scene",
+      capabilities: ["instrument", "debug"],
+      returns: "scalar",
+      status: "espStatus",
+    }, (offlineConfirmed: boolean) => { requireOffline(offlineConfirmed, "espInstall"); return esp.install(); }),
+    espTest: control({
+      label: "Overlay test box",
+      category: "Visual",
+      args: [field.checkbox("on", { label: "Test box" }), field.offline({ optional: true })],
+      doc: "Draw a test box at screen center; confirmation is required when enabling",
+      capabilities: ["instrument", "debug"],
+      returns: "scalar",
+      status: "espStatus",
+    }, (on: boolean, offlineConfirmed?: boolean) => {
+      if (on) requireOffline(offlineConfirmed, "espTest");
+      esp.test = !!on;
+      return `test=${esp.test}`;
+    }),
+    espRemove: control({
+      label: "Disable awareness overlay",
+      category: "Visual",
+      doc: "Remove the ESP hook and refresh timer",
+      capabilities: ["instrument", "debug"],
+      returns: "scalar",
+      status: "espStatus",
+    }, () => esp.remove()),
+    moveApply: write({
+      label: "Movement profile",
+      category: "Movement",
+      args: [
+        field.json("opts", { label: "Movement values", default: "{\"walk\":900}", placeholder: "{\"walk\":900,\"jump\":700}" }),
+        field.offline(),
+      ],
+      doc: "Mover walk, acceleration, jump, air, friction, and brake values; originals are captured before first write",
+      status: "moveStatus",
+    }, (opts: Record<string, number>, offlineConfirmed: boolean) => {
+      requireOffline(offlineConfirmed, "moveApply");
+      return ue.moverMovement.apply(opts);
+    }),
+    moveEnforce: control({
+      label: "Continuous movement profile",
+      category: "Movement",
+      args: [
+        field.checkbox("on", { label: "Continuous enforcement" }),
+        field.offline({ optional: true }),
+        field.slider("ms", { label: "Refresh interval (ms)", optional: true, integer: true, min: 50, max: 5000, step: 50, default: 250 }),
+      ],
+      doc: "Re-resolve components across respawns; confirmation is required when enabling",
+      status: "moveStatus",
+    }, (on: boolean, offlineConfirmed?: boolean, ms?: number) => {
+      if (on) requireOffline(offlineConfirmed, "moveEnforce");
+      return ue.moverMovement.enforce(!!on, ms);
+    }),
+    moveReset: control({
+      label: "Restore original movement",
+      category: "Movement",
+      doc: "Restore captured live values, not assumed engine defaults",
+      status: "moveStatus",
+    }, () => ue.moverMovement.reset()),
+    espStatus: read({ label: "Awareness status", category: "Visual" }, () => esp.status()),
+    moveRead: read({ label: "Movement values", category: "Movement" }, () => ue.moverMovement.read()),
+    moveStatus: read({ label: "Movement status", category: "Movement" }, () => ue.moverMovement.status()),
+    espSnapshot: read({
+      label: "Preview classified actors",
+      category: "Visual",
+      args: [field.integer("w", { optional: true, label: "Width" }), field.integer("h", { optional: true, label: "Height" })],
+      doc: "Bounded one-shot ESP data without drawing",
+      returns: "table",
+    }, (w?: number, h?: number) => esp.snapshot(w, h)),
+    info: read({ label: "UE runtime facts", category: "Discovery", doc: "UE object array and module facts" }, () => ({
       module: ue.gameModule().name,
       base: ue.gameModule().base.toString(),
       objects: ue.oa().num,
       gobjects: ue.oa().objects.toString(),
       gnames: ue.gnames().toString(),
-    };
-  },
-  classes(pkg = "/Script/PenguinHotel") {
-    return ue.classesInPackage(pkg);
-  },
-  moveProbe() {
+    })),
+    classes: read({
+      label: "Package classes",
+      category: "Discovery",
+      args: [field.text("pkg", { optional: true, default: "/Script/PenguinHotel" })],
+      returns: "table",
+    }, (pkg = "/Script/PenguinHotel") => ue.classesInPackage(pkg)),
+    moveProbe: analyze({
+      label: "Inspect controlled pawn",
+      category: "Discovery",
+      doc: "Bounded controller/pawn graph used to calibrate movement on a live build",
+    }, () => {
     const controller = ue.localPlayerController();
     const pawn = ue.controlledPawn();
     const pawnChildren = pawn ? pointerChildren(pawn) : [];
@@ -201,70 +285,27 @@ rpc.exports = {
       controller: controller ? { pointer: controller.toString(), className: ue.classNameOf(controller), name: ue.nameOf(controller), children: pointerChildren(controller) } : null,
       pawn: pawn ? { pointer: pawn.toString(), className: ue.classNameOf(pawn), name: ue.nameOf(pawn), children: pawnChildren, owned: ownedObjects(pawn), moverObjects, movementProperties: movementProperties(pawn), movementFieldValues: movementFieldValues(pawn) } : null,
     };
+    }),
+    ...recordingInstrumentActions(),
   },
-
-  // --- ESP overlay ---
-  espSnapshot(w?: number, h?: number) { return esp.snapshot(w, h); },
-  espInstall(offlineConfirmed: boolean) { requireOffline(offlineConfirmed, "espInstall"); return esp.install(); },
-  espRemove() { return esp.remove(); },
-  espTest(on: boolean, offlineConfirmed?: boolean) {
-    if (on) requireOffline(offlineConfirmed, "espTest");
-    esp.test = !!on;
-    return `test=${esp.test}`;
-  },
-  espStatus() { return esp.status(); },
-
-  // --- movement Instrument ---
-  moveRead() { return ue.moverMovement.read(); },
-  moveApply(opts: Record<string, number>, offlineConfirmed: boolean) {
-    requireOffline(offlineConfirmed, "moveApply");
-    return ue.moverMovement.apply(opts);
-  },
-  moveFly(on: boolean, offlineConfirmed?: boolean) {
-    if (on) requireOffline(offlineConfirmed, "moveFly");
-    return { ok: false, supported: false, enabled: false, reason: "UE5 Mover flight switching is not live-verified in this build" };
-  },
-  moveEnforce(on: boolean, offlineConfirmed?: boolean, ms?: number) {
-    if (on) requireOffline(offlineConfirmed, "moveEnforce");
-    return ue.moverMovement.enforce(!!on, ms);
-  },
-  moveStatus() { return ue.moverMovement.status(); },
-  moveReset() { return ue.moverMovement.reset(); },
-
-  async resetAll() {
+  reset: control({
+    label: "Reset every reversible change",
+    category: "Start here",
+    status: "modState",
+  }, async () => {
     const overlay = await esp.remove();
     const movement = ue.moverMovement.reset();
     return { overlay, movement, clean: movement.clean && !esp.status().installed };
-  },
-  async dispose() {
+  }),
+  dispose: control({
+    label: "Dispose every owned handle",
+    category: "Start here",
+    status: "modState",
+  }, async () => {
     const overlay = await esp.dispose();
     const movement = ue.moverMovement.dispose();
     return { overlay, movement, clean: movement.clean && !esp.status().installed };
-  },
-
-  __describe(): unknown {
-    return [
-      { name: "modInfo", label: "About this game mod", category: "Start here", doc: "Runtime, safety boundary, and unsupported aim path", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "modState", label: "Show every active change", category: "Start here", doc: "Owned overlay and movement state", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "info", label: "Read UE runtime facts", category: "Discovery", doc: "UE object array / module facts", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "classes", label: "List package classes", category: "Discovery", args: [{ name: "pkg", type: "string?" }], doc: "Classes in a UE package", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
-      { name: "moveProbe", label: "Inspect the controlled pawn", category: "Discovery", doc: "Bounded controller/pawn UObject graph used to calibrate movement on a live build", capabilities: ["analysis"], effect: "read", returns: "json" },
-      { name: "espSnapshot", label: "Preview classified actors", category: "Visual", args: [{ name: "w", type: "integer?" }, { name: "h", type: "integer?" }], doc: "Bounded one-shot ESP data without drawing", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
-      { name: "espInstall", label: "Enable awareness overlay", category: "Visual", args: [{ name: "offlineConfirmed", type: "boolean", ui: { control: "checkbox", label: "Owned offline session" } }], doc: "Install the owned ESP render hook in an explicitly confirmed offline scene", capabilities: ["instrument", "debug"], effect: "hook", returns: "scalar", statusAction: "espStatus" },
-      { name: "espRemove", label: "Disable awareness overlay", category: "Visual", doc: "Remove the ESP hook and refresh timer", capabilities: ["instrument", "debug"], effect: "control", returns: "scalar", statusAction: "espStatus" },
-      { name: "espTest", label: "Toggle overlay test box", category: "Debug", args: [{ name: "on", type: "boolean", ui: { control: "checkbox", label: "Test box" } }, { name: "offlineConfirmed", type: "boolean?", ui: { control: "checkbox", label: "Owned offline session" } }], doc: "Draw a test box at screen center; confirmation is required when enabling", capabilities: ["instrument", "debug"], effect: "control", returns: "scalar", statusAction: "espStatus" },
-      { name: "espStatus", label: "Read awareness status", category: "Visual", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "moveRead", label: "Read movement values", category: "Movement", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "moveApply", label: "Apply a movement profile", category: "Movement", args: [{ name: "opts", type: "json", ui: { control: "input", label: "Movement values", default: "{\"walk\":900}", placeholder: "{\"walk\":900,\"jump\":700}" } }, { name: "offlineConfirmed", type: "boolean", ui: { control: "checkbox", label: "Owned offline session" } }], doc: "UE5 Mover fields: walk, accel, jump, air, friction, brake; originals are captured before first write", capabilities: ["instrument"], effect: "write", returns: "json", statusAction: "moveStatus" },
-      { name: "moveEnforce", label: "Keep movement profile active", category: "Movement", args: [{ name: "on", type: "boolean", ui: { control: "checkbox", label: "Continuous enforcement" } }, { name: "offlineConfirmed", type: "boolean?", ui: { control: "checkbox", label: "Owned offline session" } }, { name: "ms", type: "integer?", ui: { control: "slider", label: "Refresh interval (ms)", min: 50, max: 5000, step: 50, default: 250 } }], doc: "Re-resolve components across respawns; confirmation is required when enabling", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "moveStatus" },
-      { name: "moveStatus", label: "Read movement Instrument status", category: "Movement", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "moveReset", label: "Restore original movement", category: "Movement", doc: "Restore captured live values, not assumed engine defaults", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "moveStatus" },
-      { name: "resetAll", label: "Reset every reversible change", category: "Start here", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
-      { name: "dispose", label: "Dispose every owned handle", category: "Start here", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
-      ...recordingDescriptors(),
-      { name: "__describe", doc: "This descriptor" },
-    ];
-  },
-};
+  }),
+});
 
 ok(`mecchachameleon agent ready — ${ue.oa().num} objects @ ${ue.gameModule().name}`);

@@ -9,11 +9,11 @@ Read `docs/agent-game-mod-guide.md` completely and follow it as the completion
 gate. Resolve the request's game, process, device, attach/spawn mode, and feature
 priorities. Recon the exact selected device before scaffolding. When a human can
 perform one isolated action, use bounded `record.plan/start/status/stop/summary/read`
-evidence. Build one target
-whose live descriptors, human labels, categories, and argument UI metadata form
-input, checkbox, slider, and select controls in the TUI and the same advanced console/NDJSON
-Agent surface. flab generates help from descriptors; do not implement a
-target-local `modHelp()` export. Produce subsystem coverage, safe reversible
+evidence. Build one target with `defineInstrument()` and `field.*`; declare each
+action once so flab generates live `rpc.exports`, descriptors, input/checkbox/
+slider/select controls, advanced console help, and the NDJSON Agent surface. Do
+not maintain parallel handler/descriptor arrays or implement target-local
+`modHelp()` exports. Produce subsystem coverage, safe reversible
 actions, an objectives/win-loss and economy/reward semantic model, and discovered
 aim assist, ESP/awareness, movement assistance, accessibility, and training features.
 Continuous assists stay off by default, require a live engagement gate and

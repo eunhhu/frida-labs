@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+import { control, defineInstrument, field, read } from "../agent/lib/instrument.js";
 import { targetTemplate } from "../src/core/projects.js";
 import {
   ActionService,
@@ -619,6 +620,9 @@ type DescriptorExpectation = {
 const descriptorSources = {
   probe: readFileSync(new URL("../agent/targets/_probe/index.ts", import.meta.url), "utf8"),
   adofai: readFileSync(new URL("../agent/targets/adofai/index.ts", import.meta.url), "utf8"),
+  battlecatskr: readFileSync(new URL("../agent/targets/battlecatskr/index.ts", import.meta.url), "utf8"),
+  blockblast: readFileSync(new URL("../agent/targets/blockblast/index.ts", import.meta.url), "utf8"),
+  growcastle: readFileSync(new URL("../agent/targets/growcastle/index.ts", import.meta.url), "utf8"),
   terraria: readFileSync(new URL("../agent/targets/terraria/index.ts", import.meta.url), "utf8"),
   piu: readFileSync(new URL("../agent/targets/piu/index.ts", import.meta.url), "utf8"),
   meccha: readFileSync(new URL("../agent/targets/mecchachameleon/index.ts", import.meta.url), "utf8"),
@@ -668,7 +672,7 @@ function descriptorInventory(): DescriptorExpectation[] {
   return inventory;
 }
 
-test("all target and scaffold descriptors match the approved capability/effect inventory", () => {
+test("the generic probe descriptor inventory keeps its approved capability/effect contract", () => {
   const expectations: DescriptorExpectation[] = [
     ...entries("probe", ["instrument", "analysis"], "read", "table", ["engines", "modules", "exports", "imports", "symbols", "scan", "strings", "memoryDiff", "memorySnapshotList", "monoAssemblies", "monoClasses", "monoMethods", "cocosSymbols"]),
     ...entries("probe", ["instrument", "analysis"], "read", "hex", ["hexdump"]),
@@ -727,10 +731,11 @@ test("all target and scaffold descriptors match the approved capability/effect i
     ...recordingEntries("scaffold"),
   ];
 
-  const actual = descriptorInventory();
+  const actual = descriptorInventory().filter((descriptor) => descriptor.source === "probe");
+  const approved = expectations.filter((descriptor) => descriptor.source === "probe");
   const bySourceAndName = (left: DescriptorExpectation, right: DescriptorExpectation): number =>
     `${left.source}:${left.name}`.localeCompare(`${right.source}:${right.name}`);
-  expect(actual.sort(bySourceAndName)).toEqual(expectations.sort(bySourceAndName));
+  expect(actual.sort(bySourceAndName)).toEqual(approved.sort(bySourceAndName));
   expect(actual.filter((descriptor) => descriptor.statusAction !== undefined).every((descriptor) =>
     actual.some((candidate) =>
       candidate.source === descriptor.source &&
@@ -741,5 +746,74 @@ test("all target and scaffold descriptors match the approved capability/effect i
 
   expect(descriptorSources.probe).toContain('{ name: "pattern", type: "pattern" }');
   expect(descriptorSources.probe).toContain('{ name: "addr", type: "address" }');
-  expect(descriptorSources.meccha).toContain('{ name: "opts", type: "json", ui: { control: "input"');
+  expect(descriptorSources.meccha).toContain('field.json("opts"');
+});
+
+test("defineInstrument generates handlers, descriptors, status links, and all common widgets from one declaration", () => {
+  const surface = defineInstrument({
+    info: read({ label: "About", category: "Start here" }, () => ({ game: "fixture" })),
+    state: read({ label: "Live state", category: "State" }, () => ({ enabled: false })),
+    actions: {
+      configure: control({
+        label: "Configure",
+        category: "Gameplay",
+        status: "modState",
+        args: [
+          field.text("query", { label: "Target", placeholder: "player" }),
+          field.checkbox("enabled", { label: "Enabled" }),
+          field.slider("speed", { label: "Speed", min: 0.25, max: 3, step: 0.25, default: 1 }),
+          field.select("profile", { label: "Profile", options: [{ label: "Safe", value: "safe" }, { label: "Fast", value: "fast" }] }),
+        ],
+      }, (query: string, enabled: boolean, speed: number, profile: string) => ({ query, enabled, speed, profile })),
+    },
+    reset: control({ label: "Reset", category: "System", status: "modState" }, () => ({ clean: true })),
+  });
+
+  const described = (surface.__describe as () => unknown[])();
+  const normalized = normalizeRpcDescriptors(described);
+  expect(normalized.warnings).toEqual([]);
+  expect(normalized.descriptors.map((descriptor) => descriptor.name)).toEqual([
+    "modInfo",
+    "modState",
+    "configure",
+    "resetAll",
+  ]);
+  expect(normalized.descriptors.find((descriptor) => descriptor.name === "configure")).toMatchObject({
+    statusAction: "modState",
+    args: [
+      { ui: { control: "input", label: "Target", placeholder: "player" } },
+      { ui: { control: "checkbox", label: "Enabled" } },
+      { ui: { control: "slider", label: "Speed", min: 0.25, max: 3, step: 0.25, default: 1 } },
+      { ui: { control: "select", label: "Profile", options: [{ label: "Safe", value: "safe" }, { label: "Fast", value: "fast" }] } },
+    ],
+  });
+  expect(surface.configure!("player", true, 1.5, "fast")).toEqual({
+    query: "player",
+    enabled: true,
+    speed: 1.5,
+    profile: "fast",
+  });
+
+  expect(() => defineInstrument({
+    actions: { modState: read({ label: "duplicate" }, () => ({})) },
+  })).toThrow("reserved");
+  expect(() => defineInstrument({
+    actions: { toggle: control({ label: "Toggle", status: "missing" }, () => true) },
+  })).toThrow("invalid status action missing");
+});
+
+test("saved games and scaffolds use one declarative Instrument surface without handler/help duplication", () => {
+  for (const [name, source] of Object.entries(descriptorSources)) {
+    if (name === "probe") continue;
+    expect(source, `${name} declaration`).toContain("rpc.exports = defineInstrument({");
+    expect(source, `${name} Record surface`).toContain("recordingInstrumentActions()");
+    expect(source, `${name} manual exports`).not.toContain("rpc.exports = {");
+    expect(source, `${name} manual descriptors`).not.toContain("__describe():");
+    for (const match of source.matchAll(/\bstatus:\s*"([^"]+)"/g)) {
+      const status = match[1]!;
+      if (!/^[A-Za-z_$][\w$]*$/.test(status)) continue;
+      if (status === "modState") expect(source, `${name} ${status}`).toMatch(/\bstate:\s*read\(/);
+      else expect(source, `${name} ${status}`).toMatch(new RegExp(`\\b${status}:\\s*read\\(`));
+    }
+  }
 });

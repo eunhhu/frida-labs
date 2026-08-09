@@ -208,10 +208,14 @@ export function App({
   initialTarget,
   initialProc,
   initialDevice,
+  initialSpawn,
+  initialNoWatch,
 }: {
   initialTarget?: string;
   initialProc?: string;
   initialDevice?: DeviceSelector;
+  initialSpawn?: boolean;
+  initialNoWatch?: boolean;
 }): React.JSX.Element {
   const { exit } = useApp();
   const windowSize = useWindowSize();
@@ -292,7 +296,14 @@ export function App({
   }, [refreshProcesses]);
 
   useEffect(() => {
-    if (initialTarget) workbench.attach(initialTarget, initialProc, initialDevice);
+    if (initialTarget) workbench.open({
+      kind: "target",
+      target: initialTarget,
+      ...(initialProc ? { processOverride: initialProc } : {}),
+      ...(initialSpawn ? { spawn: true } : {}),
+      ...(initialNoWatch ? { noWatch: true } : {}),
+      ...(initialDevice ? { device: initialDevice } : {}),
+    });
     return () => { void workbench.closeAll(); };
     // Initial launch is intentionally one-shot; reconnect owns later attempts.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -738,6 +749,17 @@ export function App({
   );
 }
 
-export async function runTui(target?: string, proc?: string, device?: DeviceSelector): Promise<void> {
-  render(<App initialTarget={target} initialProc={proc} initialDevice={device} />);
+export async function runTui(
+  target?: string,
+  proc?: string,
+  device?: DeviceSelector,
+  options: { spawn?: boolean; noWatch?: boolean } = {},
+): Promise<void> {
+  render(<App
+    initialTarget={target}
+    initialProc={proc}
+    initialDevice={device}
+    initialSpawn={options.spawn}
+    initialNoWatch={options.noWatch}
+  />);
 }

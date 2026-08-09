@@ -129,8 +129,9 @@ The owned-offline Windows compatibility sweep is in
 
 A finished Instrument provides the same game actions through:
 
-- a game-specific control panel in `bun run flab -- tui <target>`;
-- an advanced human console in `bun run flab -- run <target>` with generated
+- a game-specific control panel in `bun run flab -- run <target>` (also
+  available through `tui <target>`);
+- an opt-in advanced human console in `bun run flab -- run <target> --console` with generated
   `.help`, `/help`, and `:help` commands;
 - a persistent agent session in `bun run flab -- run <target> --session --json`;
 - the global authoring API in `bun run flab -- agent --json`;
@@ -150,10 +151,11 @@ command for its exact usage.
 
 ```sh
 bun run flab                              # guided TUI
-bun run flab -- tui terraria              # connect one saved game immediately
+bun run flab -- tui terraria              # same dashboard from the guided TUI command
 bun run flab -- devices                   # reachable devices
 bun run flab -- processes Terraria        # search running apps
-bun run flab -- run terraria              # saved target + advanced console (.help or /help)
+bun run flab -- run terraria              # saved target + human controls/status dashboard
+bun run flab -- run terraria --console    # expert console (.help or /help)
 bun run flab -- probe --pid 1234           # generic quick analysis
 ```
 
@@ -268,7 +270,8 @@ NDJSON-only. The protocol is `flab.ndjson.v1`.
 ## What a saved Instrument contains
 
 Targets live in `agent/targets/<game>/index.ts` and are registered in
-`frida-labs.json`. Their `__describe()` metadata drives all three interfaces.
+`frida-labs.json`. Each uses `defineInstrument()` once; flab generates callable
+RPC handlers and `__describe()` metadata for every interface from that declaration.
 
 Use short labels and stable categories such as `Objectives`, `Economy`,
 `Player`, `Combat`, `World`, `Inventory`, `Entities`, `Assist`, `Visual`,

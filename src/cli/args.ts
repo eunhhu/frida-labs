@@ -10,6 +10,7 @@ export interface ParsedCliArgs {
 const BOOLEAN_FLAGS = new Set([
   "help",
   "json",
+  "console",
   "no-watch",
   "registry-only",
   "session",

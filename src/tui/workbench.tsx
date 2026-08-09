@@ -170,6 +170,8 @@ class Workbench {
           kind: "target",
           target: options.target,
           ...(options.processOverride ? { processOverride: options.processOverride } : {}),
+          ...(options.spawn === undefined ? {} : { spawn: options.spawn }),
+          ...(options.noWatch === undefined ? {} : { noWatch: options.noWatch }),
           ...(options.spawnGating === undefined ? {} : { spawnGating: options.spawnGating }),
           ...(options.childGating === undefined ? {} : { childGating: options.childGating }),
           ...(options.device === undefined ? {} : { device: options.device }),

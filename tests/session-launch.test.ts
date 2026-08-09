@@ -70,12 +70,16 @@ test("target launch preserves the compatibility session options", () => {
     kind: "target",
     target: " terraria ",
     processOverride: " Terraria.exe ",
+    spawn: true,
+    noWatch: true,
     spawnGating: true,
     childGating: false,
   })).toEqual({
     options: {
       target: "terraria",
       processOverride: "Terraria.exe",
+      spawn: true,
+      noWatch: true,
       spawnGating: true,
       childGating: false,
     },

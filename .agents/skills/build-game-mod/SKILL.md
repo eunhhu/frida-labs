@@ -27,10 +27,10 @@ of done as the execution contract.
    ESP/awareness, movement assistance, accessibility, and training surfaces.
 4. Create or update one target. Reuse `agent/lib/`; keep game-specific glue in
    `agent/targets/<slug>/index.ts`.
-5. Expose a truthful live `__describe()` inventory. Include human `label`,
-   `category`, and argument `ui` metadata so the TUI renders input, checkbox,
-   slider, and select controls while stable RPC names remain callable from the
-   advanced console and NDJSON Agent API.
+5. Use `defineInstrument()` plus `read`/`write`/`control`/`hook` and `field.*`
+   helpers. Declare each action once; flab generates `rpc.exports`, truthful live
+   `__describe()`, human input/checkbox/slider/select controls, console help, and
+   NDJSON actions. Never hand-maintain parallel handlers and descriptor arrays.
 6. Provide real `modInfo`, `modState`, domain actions, and cleanup. Human help
    is generated from descriptors; do not add a target-local `modHelp()` export.
    Synthesize game-specific completion, economy, reward, combat, aim assist,
@@ -42,7 +42,8 @@ of done as the execution contract.
 7. Prefer `flab acp` for ACP clients or `flab mcp` for MCP harnesses; direct
    `flab agent --json` remains compatible. Use their shared `flab.control.v1`
    boundary for Record, source read/write, module linking, build, live actions,
-   cleanup, and packaging. Exercise the TUI, advanced console, and one reattach.
+   cleanup, and packaging. Exercise default `flab run <slug>` dashboard,
+   opt-in advanced console (`--console`), and one reattach.
 8. Write `agent/targets/<slug>/README.md`,
    `artifacts/<slug>/semantic-model.json`, and bounded experiment/verification
    receipts under `artifacts/<slug>/`.

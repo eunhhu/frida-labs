@@ -11,11 +11,11 @@ crystals, purchases, ads, and remote state are excluded.
 ## Start
 
 ```sh
-# Human menu: Start here → Progress/Inventory/Skills/Battle
-bun run flab -- tui growcastle --device R3CWB0GCWMX
+# Human dashboard: status + visible controls
+bun run flab -- run growcastle --device R3CWB0GCWMX
 
 # Advanced human console
-bun run flab -- run growcastle --device R3CWB0GCWMX --no-watch
+bun run flab -- run growcastle --device R3CWB0GCWMX --console --no-watch
 
 # One persistent AI session; send NDJSON on stdin
 bun run flab -- run growcastle --device R3CWB0GCWMX --session --json --no-watch
@@ -25,7 +25,7 @@ Replace the selector with `--device usb`, another exact device id, or
 `--host host:port`. Attach mode requires a live, foreground game. Android may
 freeze a cached background process; reopen GrowCastle before attaching.
 
-## Useful mod flow
+## Useful expert-console flow
 
 ```js
 await progressRead()

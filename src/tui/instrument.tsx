@@ -111,6 +111,19 @@ function actionPriority(descriptor: CanonicalRpcDescriptor): number {
   return categoryIndex >= 0 ? categoryIndex * 100 : 9_000;
 }
 
+function instrumentPriority(descriptor: CanonicalRpcDescriptor): number {
+  const name = descriptor.name.toLowerCase();
+  const category = actionCategory(descriptor);
+  const categoryIndex = CATEGORY_ORDER.indexOf(category as typeof CATEGORY_ORDER[number]);
+  const categoryWeight = categoryIndex >= 0 ? categoryIndex * 100 : 3_000;
+  if (name === "modinfo" || name === "modstate") return 9_000 + categoryWeight;
+  if (/^(resetall|dispose|record)/i.test(descriptor.name)) return 8_000 + categoryWeight;
+  if (["Discovery", "Inspect", "Runtime", "Debug", "Record", "System"].includes(category)) {
+    return 6_000 + categoryWeight;
+  }
+  return (descriptor.effect === "read" ? 4_000 : 0) + categoryWeight;
+}
+
 export interface ActionPanelProps {
   session: SessionState;
   focused: boolean;
@@ -270,7 +283,8 @@ export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
     () => normalized.descriptors.filter((descriptor) =>
       descriptor.name !== "__describe" && authorizeAction(normalized.descriptors, mode, descriptor.name).ok)
       .sort((left, right) =>
-        actionPriority(left) - actionPriority(right)
+        (mode === "instrument" ? instrumentPriority(left) : actionPriority(left))
+        - (mode === "instrument" ? instrumentPriority(right) : actionPriority(right))
         || actionCategory(left).localeCompare(actionCategory(right))
         || actionLabel(left).localeCompare(actionLabel(right))
         || left.name.localeCompare(right.name)),
@@ -278,14 +292,10 @@ export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
   );
   const selectedIndex = Math.min(cursor, Math.max(0, actions.length - 1));
   const selected = actions[selectedIndex] ?? null;
-  const categorySummary = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const descriptor of actions) {
-      const category = actionCategory(descriptor);
-      counts.set(category, (counts.get(category) ?? 0) + 1);
-    }
-    return [...counts].map(([category, count]) => `${category} ${count}`).join(" · ");
-  }, [actions]);
+  const selectedFields = useMemo(
+    () => selected ? createInstrumentForm(selected) : [],
+    [selected],
+  );
   const latest = latestForMode(session.receipts, mode);
   const latestDescriptor = latest
     ? normalized.descriptors.find((descriptor) => descriptor.name === latest.action) ?? null
@@ -313,7 +323,8 @@ export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
     const linked = descriptor?.statusAction
       ? normalized.descriptors.find((candidate) => candidate.name === descriptor.statusAction) ?? null
       : null;
-    if (linked && linked.args.every((arg) => arg.optional)) return linked;
+    if (linked && linked.effect === "read" && linked.capabilities.includes("analysis") &&
+        linked.args.every((arg) => arg.optional)) return linked;
     if (descriptor && descriptor.effect === "read" && descriptor.args.every((arg) => arg.optional) &&
         descriptor.capabilities.includes("analysis")) return descriptor;
     return normalized.descriptors.find((candidate) =>
@@ -475,57 +486,106 @@ export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
   return (
     <Box flexDirection="column" flexGrow={1} paddingX={1}>
       <Box flexDirection="column">
-        <Text bold>{props.title}</Text>
-        {mode === "instrument" && (
-          <Text dimColor>Choose a feature, edit its controls, then inspect live state below.</Text>
-        )}
+        <Text bold color={mode === "instrument" ? "cyan" : undefined}>
+          {mode === "instrument" ? "Instrument dashboard" : props.title}
+        </Text>
         <Text dimColor>
           {capture
-            ? "↑/↓ field · ←/→ adjust · type input · Enter apply · Esc cancel"
-            : `↑/↓ feature · Enter ${busy ? "running…" : "open/apply"} · s state · i details`}
+            ? "↑/↓ field · ←/→ or Space change · type input · Enter apply · Esc cancel"
+            : mode === "instrument"
+              ? `↑/↓ feature · Enter ${busy ? "running…" : "edit/apply"} · s refresh status · i details`
+              : `↑/↓ action · Enter ${busy ? "running…" : "run"} · i details`}
         </Text>
-        {!capture && actions.length > 0 && (
-          <Text dimColor>{actions.length} actions · {categorySummary} · selected {selectedIndex + 1}</Text>
-        )}
       </Box>
 
-      {session.describe === null && <Text color="yellow">Loading game actions…</Text>}
-      {session.describe !== null && actions.length === 0 && <Text dimColor>No actions are available here.</Text>}
+      {session.describe === null && <Text color="yellow">Loading game controls…</Text>}
+      {session.describe !== null && actions.length === 0 && <Text dimColor>No controls are available here.</Text>}
       {normalized.warnings.length > 0 && (
         <Text color="yellow">{normalized.warnings.length} invalid descriptor(s) hidden</Text>
       )}
+
+      {mode === "instrument" && (
+        <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={1}>
+          <Text bold>Live status <Text dimColor>· s refresh</Text></Text>
+          {stateBusy && <Text color="yellow">Refreshing…</Text>}
+          {!stateBusy && !stateReceipt && !stateError && <Text dimColor>Waiting for the target status panel…</Text>}
+          {stateError && <Text color="red">{oneLine(stateError)}</Text>}
+          {stateReceipt && !stateBusy && (
+            <>
+              <Text color={receiptColor(stateReceipt.status)}>
+                {stateReceipt.action} · {stateView?.headline ?? oneLine(stateReceipt.result.summary || "(empty)")}
+              </Text>
+              {stateView?.rows.slice(0, compact ? 2 : 3).map((row, index) => (
+                <Text key={`state-${index}`}>{oneLine(row, compact ? 76 : 180)}</Text>
+              ))}
+            </>
+          )}
+          {latest && (
+            <Text color={receiptColor(latest.status)}>
+              Last · {latest.status.toUpperCase()} · {latestDescriptor ? actionLabel(latestDescriptor) : latest.action}
+              {receiptView?.headline ? ` · ${oneLine(receiptView.headline, compact ? 40 : 100)}` : ""}
+            </Text>
+          )}
+          {latest?.error && <Text color="red">{latest.error.code}: {oneLine(latest.error.message, compact ? 60 : 140)}</Text>}
+          {invokeError && <Text color="red">Could not run feature: {oneLine(invokeError, compact ? 58 : 140)}</Text>}
+        </Box>
+      )}
+
       {!capture && visible.map((descriptor, index) => {
         const absoluteIndex = windowStart + index;
+        const quickFields = mode === "instrument" ? createInstrumentForm(descriptor) : [];
         return (
           <Text key={descriptor.name} color={absoluteIndex === selectedIndex ? "cyan" : undefined}>
             {absoluteIndex === selectedIndex ? "❯ " : "  "}
             <Text dimColor>[{actionCategory(descriptor)}]</Text> {actionLabel(descriptor)}
+            {quickFields.length === 1 ? <>  {instrumentFieldValue(quickFields[0]!)}</> : null}
+            {quickFields.length > 1 ? <Text dimColor>  [{quickFields.length} controls]</Text> : null}
+            {quickFields.length === 0 && mode === "instrument" ? <Text dimColor>  [run]</Text> : null}
           </Text>
         );
       })}
       {!capture && windowStart + visible.length < actions.length && (
-        <Text dimColor>  ↓ {actions.length - windowStart - visible.length} more actions</Text>
+        <Text dimColor>  ↓ {actions.length - windowStart - visible.length} more features</Text>
       )}
 
-      {!capture && selected && (
+      {!capture && selected && mode === "instrument" && (
+        <Box flexDirection="column" borderStyle="round" borderColor="green" paddingX={1}>
+          <Text bold>Controls · {actionLabel(selected)}</Text>
+          {selectedFields.length === 0 ? (
+            <Text color="green">[ Enter ] {selected.effect === "read" ? "Read now" : "Run feature"}</Text>
+          ) : selectedFields.slice(0, ACTION_VIEW).map((field) => (
+            <Text key={`preview-${field.arg.name}`}>
+              {instrumentFieldLabel(field)}  {instrumentFieldValue(field)}
+            </Text>
+          ))}
+          {selectedFields.length > ACTION_VIEW && <Text dimColor>+ {selectedFields.length - ACTION_VIEW} more field(s) after Enter</Text>}
+          <Text dimColor>{selectedFields.length ? "Enter → edit these controls" : effectLabel(selected)}</Text>
+          {showDetails && (
+            <>
+              <Text>{selected.doc ? oneLine(selected.doc) : "No description provided."}</Text>
+              <Text dimColor>{signature(selected)} · {selected.effect} · {selected.returns}</Text>
+            </>
+          )}
+        </Box>
+      )}
+
+      {!capture && selected && mode !== "instrument" && (
         <Box flexDirection="column" borderTop borderStyle="single" borderColor="gray">
           <Text><Text bold>{actionLabel(selected)}</Text><Text dimColor> · {actionCategory(selected)}</Text></Text>
           <Text>{selected.doc ? oneLine(selected.doc) : <Text dimColor>No description provided.</Text>}</Text>
           <Text dimColor>{effectLabel(selected)} · {inputLabel(selected)}</Text>
-          {showDetails ? (
+          {showDetails && (
             <>
               <Text><Text bold>Technical name </Text>{signature(selected)}</Text>
-              <Text dimColor>
-                effect {selected.effect} · returns {selected.returns} · capabilities {selected.capabilities.join(", ")}
-              </Text>
+              <Text dimColor>effect {selected.effect} · returns {selected.returns} · capabilities {selected.capabilities.join(", ")}</Text>
             </>
-          ) : <Text dimColor>Technical details hidden.</Text>}
+          )}
         </Box>
       )}
 
       {capture && (
         <Box flexDirection="column" borderStyle="round" borderColor="yellow" paddingX={1}>
-          <Text bold color="yellow">{actionLabel(capture.descriptor)}</Text>
+          <Text bold color="yellow">Edit · {actionLabel(capture.descriptor)}</Text>
           {visibleFields.map((field, index) => {
             const absoluteIndex = formStart + index;
             const active = absoluteIndex === capture.index;
@@ -537,70 +597,50 @@ export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
             );
           })}
           {capture.error && <Text color="red">{oneLine(capture.error)}</Text>}
-          <Text dimColor>{capture.descriptor.doc ? oneLine(capture.descriptor.doc) : effectLabel(capture.descriptor)}</Text>
+          <Text dimColor>Enter applies all fields · Esc keeps the game unchanged</Text>
         </Box>
       )}
 
-      {mode === "instrument" && (
-        <Box flexDirection="column" borderTop borderStyle="single" borderColor="cyan">
-          <Text bold>Live state <Text dimColor>· s refresh</Text></Text>
-          {stateBusy && <Text color="yellow">Refreshing state…</Text>}
-          {!stateBusy && !stateReceipt && !stateError && <Text dimColor>No state action is linked for this feature.</Text>}
-          {stateError && <Text color="red">{oneLine(stateError)}</Text>}
-          {stateReceipt && !stateBusy && (
+      {mode !== "instrument" && (
+        <Box flexDirection="column" borderTop borderStyle="single" borderColor="gray">
+          <Text bold>Last action result</Text>
+          {!latest && <Text dimColor>No action has run yet.</Text>}
+          {latest && (
             <>
-              <Text color={receiptColor(stateReceipt.status)}>
-                {stateReceipt.action} · {stateView?.headline ?? oneLine(stateReceipt.result.summary || "(empty)")}
+              <Text color={receiptColor(latest.status)}>
+                {latest.status.toUpperCase()} · {latestDescriptor ? actionLabel(latestDescriptor) : latest.action} · {receiptView?.headline ?? oneLine(latest.result.summary || "(no summary)")}
               </Text>
-              {stateView?.rows.slice(0, compact ? 2 : 4).map((row, index) => (
-                <Text key={`state-${index}`}>{oneLine(row, 180)}</Text>
+              {latest.error && <Text color="red">{latest.error.code}: {oneLine(latest.error.message)}</Text>}
+              {latest.verification && (
+                <Text color={latest.verification.state === "verified" ? "green" : latest.verification.state === "failed" ? "red" : "yellow"}>
+                  verification {latest.verification.state} · fired {latest.verification.fired}
+                  {latest.verification.detail ? ` · ${oneLine(latest.verification.detail)}` : ""}
+                </Text>
+              )}
+              {receiptView?.detail && <Text>{receiptView.detail}</Text>}
+              {receiptView?.config && <Text dimColor>{oneLine(receiptView.config)}</Text>}
+              {receiptView?.rows.slice(0, compact ? 2 : receiptView.rows.length)
+                .map((row, index) => <Text key={`view-${index}`}>{oneLine(row, 150)}</Text>)}
+              {latest.result.rows.slice(visibleRowOffset, visibleRowOffset + receiptRows).map((row, index) => (
+                <Text key={visibleRowOffset + index}>{oneLine(row)}</Text>
               ))}
+              {latest.result.rows.length > receiptRows && (
+                <Text dimColor>
+                  rows {visibleRowOffset + 1}-{Math.min(latest.result.rows.length, visibleRowOffset + receiptRows)}
+                  /{latest.result.rows.length}
+                </Text>
+              )}
+              {props.enablePaging && pageCursor && (pageCursor.index > 0 || latest.result.nextOffset !== undefined) && (
+                <Text dimColor>
+                  page offset {pageCursor.offsets[pageCursor.index] ?? 0}
+                  {latest.result.nextOffset === undefined ? " · final page" : ` · next ${latest.result.nextOffset}`}
+                </Text>
+              )}
             </>
           )}
+          {invokeError && <Text color="red">Could not run action: {oneLine(invokeError)}</Text>}
         </Box>
       )}
-
-      <Box flexDirection="column" borderTop borderStyle="single" borderColor="gray">
-        <Text bold>Last action result</Text>
-        {!latest && <Text dimColor>No action has run yet.</Text>}
-        {latest && (
-          <>
-            <Text color={receiptColor(latest.status)}>
-              {latest.status.toUpperCase()} · {latestDescriptor ? actionLabel(latestDescriptor) : latest.action} · {receiptView?.headline ?? oneLine(latest.result.summary || "(no summary)")}
-            </Text>
-            {latest.error && <Text color="red">{latest.error.code}: {oneLine(latest.error.message)}</Text>}
-            {latest.verification && (
-              <Text color={latest.verification.state === "verified" ? "green" : latest.verification.state === "failed" ? "red" : "yellow"}>
-                verification {latest.verification.state} · fired {latest.verification.fired}
-                {latest.verification.detail ? ` · ${oneLine(latest.verification.detail)}` : ""}
-              </Text>
-            )}
-            {receiptView?.detail && <Text>{receiptView.detail}</Text>}
-            {receiptView?.config && <Text dimColor>{oneLine(receiptView.config)}</Text>}
-            {receiptView?.rows.slice(0, compact ? 2 : receiptView.rows.length)
-              .map((row, index) => <Text key={`view-${index}`}>{oneLine(row, 150)}</Text>)}
-            {compact && receiptView && receiptView.rows.length > 2 && (
-              <Text dimColor>+ {receiptView.rows.length - 2} more result field(s) · widen terminal to show</Text>
-            )}
-            {latest.result.rows.slice(visibleRowOffset, visibleRowOffset + receiptRows).map((row, index) => (
-              <Text key={visibleRowOffset + index}>{oneLine(row)}</Text>
-            ))}
-            {latest.result.rows.length > receiptRows && (
-              <Text dimColor>
-                rows {visibleRowOffset + 1}-{Math.min(latest.result.rows.length, visibleRowOffset + receiptRows)}
-                /{latest.result.rows.length}
-              </Text>
-            )}
-            {props.enablePaging && pageCursor && (pageCursor.index > 0 || latest.result.nextOffset !== undefined) && (
-              <Text dimColor>
-                page offset {pageCursor.offsets[pageCursor.index] ?? 0}
-                {latest.result.nextOffset === undefined ? " · final page" : ` · next ${latest.result.nextOffset}`}
-              </Text>
-            )}
-          </>
-        )}
-        {invokeError && <Text color="red">Could not run action: {oneLine(invokeError)}</Text>}
-      </Box>
     </Box>
   );
 }

@@ -5,7 +5,8 @@ import { perform } from "../../lib/il2cpp.js";
 import { ActivityWindowController } from "../../lib/android-activity.js";
 import { FrameMeter } from "../../lib/frame-meter.js";
 import { ok } from "../../lib/log.js";
-import { recordingDescriptors, recordingRpcSurface } from "../../lib/recording.js";
+import { control, defineInstrument, field, hook, read, write } from "../../lib/instrument.js";
+import { recordingInstrumentActions } from "../../lib/recording.js";
 
 const ACTIVITY = "com.raongames.player.MainActivity";
 const windowControl = new ActivityWindowController(ACTIVITY);
@@ -472,194 +473,181 @@ async function resetAll(): Promise<unknown> {
   };
 }
 
-const surface = {
-  ...recordingRpcSurface(),
-  modInfo(): unknown {
-    return {
-      game: "GrowCastle",
-      package: "com.raongames.growcastle",
-      testedVersion: "1.50.14",
-      device: "R3CWB0GCWMX",
-      runtime: "Unity IL2CPP / libil2cpp.so",
-      scriptsAssembly: "Scripts.dll",
-      safety: "Authorized offline/single-player runtime only; no rankings, cloud sync, purchases, ads, crystals, or remote state.",
-    };
-  },
-  async modState(): Promise<unknown> {
-    return {
-      progression: await progressState(),
-      unity: await unityState(),
-      activity: await activityState(),
-      performance: frameMeter.status(),
-    };
-  },
-  progressRead: progressState,
-  inventorySetGold: setGold,
-  progressSetPlayerLevel: setPlayerLevel,
-  progressSetSkillPoints: setSkillPoints,
-  battleSetPause: setPause,
-  skillsSetNoCooldown: setNoCooldown,
-  skillsCooldownStatus: cooldownState,
-  waveState,
-  waveSkip: skipWaves,
-  async assemblies(): Promise<unknown> {
-    return perform(() => Il2Cpp.domain.assemblies.slice(0, 200).map((assembly) => ({
-      name: assembly.name,
-      image: assembly.image.name,
-      classes: assembly.image.classCount,
-    })));
-  },
-  async gameCatalog(): Promise<unknown> {
-    return perform(() => {
-      const groups = [
-        ["Player", "player|hero|character"],
-        ["World", "castle|stage|wave|world|map"],
-        ["Combat", "enemy|monster|damage|health|attack"],
-        ["Inventory", "inventory|item|equipment|weapon"],
-        ["Progression", "skill|quest|level|upgrade|gold"],
-        ["QoL", "speed|camera|input|ui|save"],
-      ] as const;
-      const all = scriptsAssembly().image.classes;
-      return groups.map(([category, pattern]) => {
-        const regex = new RegExp(pattern, "i");
-        const matches = all.filter((klass) => regex.test(klass.fullName));
-        return { category, total: matches.length, sample: matches.slice(0, 20).map((klass) => klass.fullName) };
-      });
-    });
-  },
-  async classSearch(query: string): Promise<unknown> {
-    return perform(() => classRows(query));
-  },
-  async methodSearch(query: string): Promise<unknown> {
-    const needle = boundedQuery(query);
-    return perform(() => scriptsAssembly().image.classes
-      .flatMap((klass) => klass.methods.filter((method) => method.name.toLowerCase().includes(needle)))
-      .slice(0, 200)
-      .map(methodRow));
-  },
-  async classDescribe(fullName: string): Promise<unknown> {
-    const name = String(fullName ?? "").trim();
-    if (!name || name.length > 160) throw new Error("fullName must be 1-160 characters");
-    return perform(() => {
-      const klass = scriptsAssembly().image.classes.find((candidate) => candidate.fullName === name);
-      if (!klass) throw new Error(`class not found: ${name}`);
-      return {
-        name: klass.fullName,
-        parent: klass.parent?.fullName ?? null,
-        fields: klass.fields.slice(0, 120).map((field) => ({
-          name: field.name,
-          type: field.type.name,
-          offset: field.offset,
-          static: field.isStatic,
-        })),
-        methods: klass.methods.slice(0, 120).map(methodRow),
-        truncated: klass.fields.length > 120 || klass.methods.length > 120,
-      };
-    });
-  },
-  timeRead: unityState,
-  async timeSetScale(scale: number): Promise<unknown> {
-    const value = Number(scale);
-    if (!Number.isFinite(value) || value < 0.25 || value > 3) throw new Error("scale must be between 0.25 and 3");
-    return perform(() => {
-      if (Process.arch !== "arm64") throw new Error(`persistent time-scale control is not implemented for ${Process.arch}`);
-      const time = Il2Cpp.domain.assembly("UnityEngine.CoreModule").image.class("UnityEngine.Time");
-      const getter = time.method<number>("get_timeScale", 0);
-      if (originalTimeScale === null) originalTimeScale = Number(getter.invoke());
-      const setter = time.method<void>("set_timeScale", 1);
-      timeScaleLock = value;
-      if (!timeScaleListener) {
-        const address = setter.virtualAddress;
-        if (address.isNull()) throw new Error("Unity time-scale setter has no native address");
-        timeScaleAddress = address.toString();
-        timeScaleInterceptedWrites = 0;
-        timeScaleListener = Interceptor.attach(address, {
-          onEnter() {
-            if (timeScaleLock === null) return;
-            // AArch64 passes the first float argument in S0.
-            (this.context as Arm64CpuContext).s0 = timeScaleLock;
-            timeScaleInterceptedWrites += 1;
-          },
-        });
-      }
-      setter.invoke(value);
-      return {
-        timeScale: Number(getter.invoke()),
-        original: originalTimeScale,
-        owned: true,
-        lock: timeScaleLockState(),
-      };
-    });
-  },
-  async qolSetTargetFps(fps: number): Promise<unknown> {
-    const value = Number(fps);
-    if (!Number.isInteger(value) || value < 15 || value > 240) throw new Error("fps must be an integer between 15 and 240");
-    return perform(() => {
-      const application = Il2Cpp.domain.assembly("UnityEngine.CoreModule").image.class("UnityEngine.Application");
-      const getter = application.method<number>("get_targetFrameRate", 0);
-      if (originalTargetFrameRate === null) originalTargetFrameRate = Number(getter.invoke());
-      const setter = application.method<void>("set_targetFrameRate", 1);
-      targetFrameRateLock = value;
-      if (!targetFrameRateListener) {
-        const address = setter.virtualAddress;
-        if (address.isNull()) throw new Error("Unity target-frame-rate setter has no native address");
-        targetFrameRateAddress = address.toString();
-        targetFrameRateInterceptedWrites = 0;
-        targetFrameRateListener = Interceptor.attach(address, {
-          onEnter(args) {
-            if (targetFrameRateLock === null) return;
-            args[0] = ptr(targetFrameRateLock);
-            targetFrameRateInterceptedWrites += 1;
-          },
-        });
-      }
-      setter.invoke(value);
-      return {
-        targetFrameRate: Number(getter.invoke()),
-        original: originalTargetFrameRate,
-        owned: true,
-        lock: targetFpsLockState(),
-      };
-    });
-  },
-  async qolKeepAwake(enabled: boolean): Promise<unknown> { return windowControl.setKeepScreenOn(enabled); },
-  performanceStart(): unknown { return frameMeter.start(); },
-  performanceStatus(): unknown { return frameMeter.status(); },
-  performanceStop(): unknown { return frameMeter.stop(); },
-  resetAll,
-  async dispose(): Promise<unknown> { return resetAll(); },
-  __describe(): unknown {
-    return [
-      { name: "modInfo", label: "About this game mod", category: "Start here", doc: "Tested build, runtime, and offline-only safety boundary", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "modState", label: "Show every active change", category: "Start here", doc: "Progress, battle, hooks, Unity values, and cleanup captures", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "progressRead", label: "Read gold and progress", category: "Progress", doc: "Read local gold, player level, skill points, wave, battle, and captured reset values", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "inventorySetGold", label: "Set local gold", category: "Inventory", args: [{ name: "gold", type: "integer", ui: { control: "input", label: "Gold", placeholder: "0..1000000000000" } }], doc: "Set 0..1,000,000,000,000 local gold through Inventory.set_Gold; resetAll restores the first captured value", capabilities: ["instrument"], effect: "write", returns: "json", statusAction: "progressRead" },
-      { name: "progressSetPlayerLevel", label: "Set player level", category: "Progress", args: [{ name: "level", type: "integer", ui: { control: "slider", label: "Player level", min: 1, max: 10000, step: 1, default: 100 } }], doc: "Set local player level from 1..10,000 through Player.set_Level; resetAll restores it", capabilities: ["instrument"], effect: "write", returns: "json", statusAction: "progressRead" },
-      { name: "progressSetSkillPoints", label: "Set skill points", category: "Progress", args: [{ name: "points", type: "integer", ui: { control: "slider", label: "Skill points", min: 0, max: 100000, step: 100, default: 1000 } }], doc: "Set 0..100,000 local skill points through Player.set_SkillPoint; resetAll restores them", capabilities: ["instrument"], effect: "write", returns: "json", statusAction: "progressRead" },
-      { name: "battleSetPause", label: "Pause battle", category: "Battle", args: [{ name: "enabled", type: "boolean", ui: { control: "checkbox", label: "Battle paused" } }], doc: "Pause or resume the local battle through GameManager; resetAll restores the first state", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "progressRead" },
-      { name: "skillsSetNoCooldown", label: "Unlimited skill use", category: "Skills", args: [{ name: "enabled", type: "boolean", ui: { control: "checkbox", label: "No cooldown" } }], doc: "Accelerate active, auto, and infinite-skill cooldown reducers; status counts live hook firings", capabilities: ["instrument"], effect: "hook", returns: "verification", statusAction: "skillsCooldownStatus" },
-      { name: "skillsCooldownStatus", label: "Skill hook status", category: "Skills", doc: "Show installed cooldown hooks and live firing count", capabilities: ["instrument", "analysis"], effect: "read", returns: "verification" },
-      { name: "waveState", label: "Read wave battle", category: "Battle", doc: "Read active wave battle and queued skip state", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "waveSkip", label: "Skip current waves", category: "Battle", args: [{ name: "count", type: "integer", ui: { control: "slider", label: "Waves", min: 1, max: 20, step: 1, default: 1 } }, { name: "offlineConfirmed", type: "boolean", ui: { control: "checkbox", label: "Owned offline session" } }], doc: "Queue 1..20 waves through GameMap.AddSkip without crystals; requires active normal battle and explicit offline confirmation; one-shot and not resettable", capabilities: ["instrument"], effect: "write", returns: "json", statusAction: "waveState" },
-      { name: "assemblies", label: "Loaded assemblies", category: "Discovery", doc: "Bounded IL2CPP assembly and class counts", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
-      { name: "gameCatalog", label: "Map game systems", category: "Discovery", doc: "Group live Scripts.dll classes by game subsystem", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
-      { name: "classSearch", label: "Find game classes", category: "Discovery", args: [{ name: "query", type: "string" }], doc: "Case-insensitive bounded class search in Scripts.dll", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
-      { name: "methodSearch", label: "Find game methods", category: "Discovery", args: [{ name: "query", type: "string" }], doc: "Bounded method search with signatures and live addresses", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
-      { name: "classDescribe", label: "Inspect one class", category: "Discovery", args: [{ name: "fullName", type: "string" }], doc: "Fields, methods, types, offsets, and addresses", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "timeRead", label: "Read game speed", category: "World", doc: "Read Unity time scale and target frame rate", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "timeSetScale", label: "Set game speed", category: "World", args: [{ name: "scale", type: "number", ui: { control: "slider", label: "Game speed", min: 0.25, max: 3, step: 0.25, default: 1 } }], doc: "Set local Unity time scale from 0.25 to 3; resetAll restores the captured value", capabilities: ["instrument"], effect: "write", returns: "json", statusAction: "timeRead" },
-      { name: "qolSetTargetFps", label: "Set target FPS", category: "QoL", args: [{ name: "fps", type: "integer", ui: { control: "slider", label: "Target FPS", min: 15, max: 240, step: 15, default: 60 } }], doc: "Set Unity target frame rate from 15 to 240; resetAll restores the captured value", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "timeRead" },
-      { name: "qolKeepAwake", label: "Keep screen awake", category: "QoL", args: [{ name: "enabled", type: "boolean", ui: { control: "checkbox", label: "Keep screen awake" } }], doc: "Toggle the game Activity window flag; resetAll restores its original value", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
-      { name: "performanceStart", label: "Start FPS meter", category: "QoL", doc: "Observe EGL frames without changing rendering", capabilities: ["instrument"], effect: "hook", returns: "verification", statusAction: "performanceStatus" },
-      { name: "performanceStatus", label: "FPS meter status", category: "QoL", doc: "Frame count, measured FPS, and firing verification", capabilities: ["instrument", "analysis"], effect: "read", returns: "verification" },
-      { name: "performanceStop", label: "Stop FPS meter", category: "QoL", doc: "Detach the owned EGL listener", capabilities: ["instrument"], effect: "control", returns: "verification", statusAction: "performanceStatus" },
-      { name: "resetAll", label: "Reset every reversible change", category: "Start here", doc: "Restore gold, level, skill points, pause, Unity/window values, and detach every owned hook/listener", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
-      { name: "dispose", label: "Dispose mod", category: "Debug", doc: "Cleanup alias used before reload or detach", capabilities: ["instrument", "debug"], effect: "control", returns: "json" },
-      ...recordingDescriptors(),
-      { name: "__describe", doc: "This descriptor" },
-    ];
-  },
-};
+async function assemblies(): Promise<unknown> {
+  return perform(() => Il2Cpp.domain.assemblies.slice(0, 200).map((assembly) => ({
+    name: assembly.name,
+    image: assembly.image.name,
+    classes: assembly.image.classCount,
+  })));
+}
 
-rpc.exports = surface;
+async function gameCatalog(): Promise<unknown> {
+  return perform(() => {
+    const groups = [
+      ["Player", "player|hero|character"],
+      ["World", "castle|stage|wave|world|map"],
+      ["Combat", "enemy|monster|damage|health|attack"],
+      ["Inventory", "inventory|item|equipment|weapon"],
+      ["Progression", "skill|quest|level|upgrade|gold"],
+      ["QoL", "speed|camera|input|ui|save"],
+    ] as const;
+    const all = scriptsAssembly().image.classes;
+    return groups.map(([category, pattern]) => {
+      const regex = new RegExp(pattern, "i");
+      const matches = all.filter((klass) => regex.test(klass.fullName));
+      return { category, total: matches.length, sample: matches.slice(0, 20).map((klass) => klass.fullName) };
+    });
+  });
+}
+
+async function classSearch(query: string): Promise<unknown> {
+  return perform(() => classRows(query));
+}
+
+async function methodSearch(query: string): Promise<unknown> {
+  const needle = boundedQuery(query);
+  return perform(() => scriptsAssembly().image.classes
+    .flatMap((klass) => klass.methods.filter((method) => method.name.toLowerCase().includes(needle)))
+    .slice(0, 200)
+    .map(methodRow));
+}
+
+async function classDescribe(fullName: string): Promise<unknown> {
+  const name = String(fullName ?? "").trim();
+  if (!name || name.length > 160) throw new Error("fullName must be 1-160 characters");
+  return perform(() => {
+    const klass = scriptsAssembly().image.classes.find((candidate) => candidate.fullName === name);
+    if (!klass) throw new Error(`class not found: ${name}`);
+    return {
+      name: klass.fullName,
+      parent: klass.parent?.fullName ?? null,
+      fields: klass.fields.slice(0, 120).map((field) => ({
+        name: field.name,
+        type: field.type.name,
+        offset: field.offset,
+        static: field.isStatic,
+      })),
+      methods: klass.methods.slice(0, 120).map(methodRow),
+      truncated: klass.fields.length > 120 || klass.methods.length > 120,
+    };
+  });
+}
+
+async function timeSetScale(scale: number): Promise<unknown> {
+  const value = Number(scale);
+  if (!Number.isFinite(value) || value < 0.25 || value > 3) throw new Error("scale must be between 0.25 and 3");
+  return perform(() => {
+    if (Process.arch !== "arm64") throw new Error(`persistent time-scale control is not implemented for ${Process.arch}`);
+    const time = Il2Cpp.domain.assembly("UnityEngine.CoreModule").image.class("UnityEngine.Time");
+    const getter = time.method<number>("get_timeScale", 0);
+    if (originalTimeScale === null) originalTimeScale = Number(getter.invoke());
+    const setter = time.method<void>("set_timeScale", 1);
+    timeScaleLock = value;
+    if (!timeScaleListener) {
+      const address = setter.virtualAddress;
+      if (address.isNull()) throw new Error("Unity time-scale setter has no native address");
+      timeScaleAddress = address.toString();
+      timeScaleInterceptedWrites = 0;
+      timeScaleListener = Interceptor.attach(address, {
+        onEnter() {
+          if (timeScaleLock === null) return;
+          // AArch64 passes the first float argument in S0.
+          (this.context as Arm64CpuContext).s0 = timeScaleLock;
+          timeScaleInterceptedWrites += 1;
+        },
+      });
+    }
+    setter.invoke(value);
+    return {
+      timeScale: Number(getter.invoke()),
+      original: originalTimeScale,
+      owned: true,
+      lock: timeScaleLockState(),
+    };
+  });
+}
+
+async function setTargetFps(fps: number): Promise<unknown> {
+  const value = Number(fps);
+  if (!Number.isInteger(value) || value < 15 || value > 240) throw new Error("fps must be an integer between 15 and 240");
+  return perform(() => {
+    const application = Il2Cpp.domain.assembly("UnityEngine.CoreModule").image.class("UnityEngine.Application");
+    const getter = application.method<number>("get_targetFrameRate", 0);
+    if (originalTargetFrameRate === null) originalTargetFrameRate = Number(getter.invoke());
+    const setter = application.method<void>("set_targetFrameRate", 1);
+    targetFrameRateLock = value;
+    if (!targetFrameRateListener) {
+      const address = setter.virtualAddress;
+      if (address.isNull()) throw new Error("Unity target-frame-rate setter has no native address");
+      targetFrameRateAddress = address.toString();
+      targetFrameRateInterceptedWrites = 0;
+      targetFrameRateListener = Interceptor.attach(address, {
+        onEnter(args) {
+          if (targetFrameRateLock === null) return;
+          args[0] = ptr(targetFrameRateLock);
+          targetFrameRateInterceptedWrites += 1;
+        },
+      });
+    }
+    setter.invoke(value);
+    return {
+      targetFrameRate: Number(getter.invoke()),
+      original: originalTargetFrameRate,
+      owned: true,
+      lock: targetFpsLockState(),
+    };
+  });
+}
+
+rpc.exports = defineInstrument({
+  info: read({
+    label: "About this Instrument",
+    category: "Start here",
+    doc: "Tested build, runtime, and offline-only safety boundary",
+  }, () => ({
+    game: "GrowCastle",
+    package: "com.raongames.growcastle",
+    testedVersion: "1.50.14",
+    device: "R3CWB0GCWMX",
+    runtime: "Unity IL2CPP / libil2cpp.so",
+    scriptsAssembly: "Scripts.dll",
+    safety: "Authorized offline/single-player runtime only; no rankings, cloud sync, purchases, ads, crystals, or remote state.",
+  })),
+  state: read({
+    label: "Active changes",
+    category: "Start here",
+    doc: "Progress, battle, hooks, Unity values, and cleanup captures",
+  }, async () => ({
+    progression: await progressState(),
+    unity: await unityState(),
+    activity: await activityState(),
+    performance: frameMeter.status(),
+  })),
+  actions: {
+    inventorySetGold: write({ label: "Local gold", category: "Inventory", args: [field.integer("gold", { label: "Gold", placeholder: "0..1000000000000" })], doc: "Set local gold through Inventory.set_Gold; reset restores the first captured value", status: "progressRead" }, setGold),
+    progressSetPlayerLevel: write({ label: "Player level", category: "Progress", args: [field.slider("level", { label: "Player level", integer: true, min: 1, max: 10000, step: 1, default: 100 })], doc: "Set local player level; reset restores it", status: "progressRead" }, setPlayerLevel),
+    progressSetSkillPoints: write({ label: "Skill points", category: "Progress", args: [field.slider("points", { label: "Skill points", integer: true, min: 0, max: 100000, step: 100, default: 1000 })], doc: "Set local skill points; reset restores them", status: "progressRead" }, setSkillPoints),
+    battleSetPause: control({ label: "Pause battle", category: "Battle", args: [field.checkbox("enabled", { label: "Battle paused" })], doc: "Pause or resume the local battle; reset restores the first state", status: "progressRead" }, setPause),
+    skillsSetNoCooldown: hook({ label: "Unlimited skill use", category: "Skills", args: [field.checkbox("enabled", { label: "No cooldown" })], doc: "Accelerate active, auto, and infinite-skill cooldown reducers", returns: "verification", status: "skillsCooldownStatus" }, setNoCooldown),
+    waveSkip: write({ label: "Skip current waves", category: "Battle", args: [field.slider("count", { label: "Waves", integer: true, min: 1, max: 20, step: 1, default: 1 }), field.offline()], doc: "Queue 1..20 waves in an active normal offline battle; one-shot and not resettable", status: "waveState" }, skipWaves),
+    timeSetScale: write({ label: "Game speed", category: "World", args: [field.slider("scale", { label: "Game speed", min: 0.25, max: 3, step: 0.25, default: 1 })], doc: "Set local Unity time scale; reset restores the captured value", status: "timeRead" }, timeSetScale),
+    qolSetTargetFps: control({ label: "Target FPS", category: "QoL", args: [field.slider("fps", { label: "Target FPS", integer: true, min: 15, max: 240, step: 15, default: 60 })], doc: "Set Unity target frame rate; reset restores the captured value", status: "timeRead" }, setTargetFps),
+    qolKeepAwake: control({ label: "Keep screen awake", category: "QoL", args: [field.checkbox("enabled", { label: "Keep screen awake" })], status: "modState" }, (enabled: boolean) => windowControl.setKeepScreenOn(enabled)),
+    performanceStart: hook({ label: "FPS meter", category: "QoL", returns: "verification", status: "performanceStatus" }, () => frameMeter.start()),
+    performanceStop: control({ label: "Stop FPS meter", category: "QoL", returns: "verification", status: "performanceStatus" }, () => frameMeter.stop()),
+    progressRead: read({ label: "Gold and progress", category: "Progress", doc: "Local gold, level, skill points, wave, battle, and captured reset values" }, progressState),
+    skillsCooldownStatus: read({ label: "Skill hook status", category: "Skills", returns: "verification" }, cooldownState),
+    waveState: read({ label: "Wave battle", category: "Battle" }, waveState),
+    timeRead: read({ label: "Game speed status", category: "World" }, unityState),
+    performanceStatus: read({ label: "FPS meter status", category: "QoL", returns: "verification" }, () => frameMeter.status()),
+    assemblies: read({ label: "Loaded assemblies", category: "Discovery", returns: "table" }, assemblies),
+    gameCatalog: read({ label: "Game systems", category: "Discovery", returns: "table" }, gameCatalog),
+    classSearch: read({ label: "Find game classes", category: "Discovery", args: [field.text("query")], returns: "table" }, classSearch),
+    methodSearch: read({ label: "Find game methods", category: "Discovery", args: [field.text("query")], returns: "table" }, methodSearch),
+    classDescribe: read({ label: "Inspect one class", category: "Discovery", args: [field.text("fullName")] }, classDescribe),
+    ...recordingInstrumentActions(),
+  },
+  reset: control({ label: "Reset every reversible change", category: "Start here", doc: "Restore progress, battle, Unity/window values, and detach every owned hook", status: "modState" }, resetAll),
+  dispose: control({ label: "Dispose Instrument", category: "Debug", capabilities: ["instrument", "debug"] }, resetAll),
+});
 ok("[growcastle] real game APIs ready: gold, level, skills, pause, cooldown, waves");

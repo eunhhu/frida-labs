@@ -7,7 +7,8 @@ everything below works the same on Windows and Unix.
 
 ```sh
 bun install
-flab run <target> [--spawn]      # compile + attach + advanced console (hot reload; .help or /help)
+flab run <target> [--spawn]      # compile + attach + human Instrument dashboard
+flab run <target> --console      # opt-in advanced console (.help or /help)
 flab tui [target]                # three-mode Connect/Analyze/Instrument TUI
 flab processes                   # discover processes and target matches
 flab devices                     # enumerate local/USB/remote Frida devices
@@ -71,9 +72,11 @@ Two processes, one boundary:
   toolkit (mem, hook, search, mono, ue, il2cpp, assist, detect, watch, strings,
   cocos); `targets/<name>/` is per-game glue.
 
-Data crosses the boundary as JSON only. `rpc.exports` functions are callable
-from the host by bare name; return pointers as strings. Targets expose
-`__describe()` with typed action metadata. `GameSession.describe()` fails closed
+Data crosses the boundary as JSON only. Targets use `defineInstrument()` plus
+`read`/`write`/`control`/`hook` and `field.*` helpers so one declaration generates
+both callable `rpc.exports` and typed `__describe()` metadata; return pointers as
+strings. Never hand-maintain parallel handler and descriptor inventories.
+`GameSession.describe()` fails closed
 when it is missing, malformed, or throws; cached exports never authorize an
 action. Agent log lines flow host-side via `lib/log.ts` (`ok`/`warn`/`err`)—
 never bare `console.log`.
@@ -103,11 +106,12 @@ not document individual games in repo-level docs.
   `agent/lib/<engine>/` from the start — target-local helper modules are
   rejected by `flab depcheck`.
 - No TODO stubs, dead code, or commented-out experiments in merged targets.
-- New game-specific surfaces provide concise `label`, `category`, and argument
-  `ui` descriptor metadata. Instrument renders input/checkbox/slider/select
-  controls plus linked state while stable RPC names stay shared by the console
-  and NDJSON callers. flab generates `.help`/`/help` from descriptors; targets
-  do not implement `modHelp()`.
+- New game-specific surfaces use `defineInstrument()` and `field.*` with concise
+  `label`, `category`, and UI metadata. Instrument renders input/checkbox/slider/
+  select controls plus linked state while stable RPC names stay shared by the
+  console and NDJSON callers. flab generates `rpc.exports`, `__describe()`, and
+  `.help`/`/help`; targets do not implement parallel exports, descriptor arrays,
+  or `modHelp()`.
 - TUI modules import the `src/core/index.ts` barrel only. They never import
   `frida`, `agent/lib`, or target modules directly; authorization and launch
   validation remain core responsibilities.

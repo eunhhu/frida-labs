@@ -13,11 +13,11 @@ purchases, ads, and remote values are excluded.
 ## Start
 
 ```sh
-# Human menu: Start here → Progress/Content/Gameplay
-bun run flab -- tui blockblast --device R3CWB0GCWMX
+# Human dashboard: status + visible controls
+bun run flab -- run blockblast --device R3CWB0GCWMX
 
 # Advanced human console
-bun run flab -- run blockblast --device R3CWB0GCWMX --no-watch
+bun run flab -- run blockblast --device R3CWB0GCWMX --console --no-watch
 
 # One persistent AI session; send NDJSON on stdin
 bun run flab -- run blockblast --device R3CWB0GCWMX --session --json --no-watch
@@ -29,7 +29,7 @@ bun run flab -- run blockblast --device R3CWB0GCWMX --spawn --no-watch
 Replace the selector with `--device usb`, another exact device id, or
 `--host host:port` for a remote Frida endpoint.
 
-## Useful mod flow
+## Useful expert-console flow
 
 ```js
 await progressRead()

@@ -6,7 +6,8 @@ import { ActivityWindowController } from "../../lib/android-activity.js";
 import { FrameMeter } from "../../lib/frame-meter.js";
 import { withVerification, type Verification, type VerificationStatus } from "../../lib/hook.js";
 import { ok } from "../../lib/log.js";
-import { recordingDescriptors, recordingRpcSurface } from "../../lib/recording.js";
+import { control, defineInstrument, field, hook, read } from "../../lib/instrument.js";
+import { recordingInstrumentActions } from "../../lib/recording.js";
 
 const ACTIVITY = "jp.co.ponos.battlecats.MyActivity";
 const TOUCH_EXPORT = "Java_jp_co_ponos_battlecats_MyActivity_appTouch";
@@ -89,10 +90,12 @@ async function resetAll(): Promise<unknown> {
   }
 }
 
-const surface = {
-  ...recordingRpcSurface(),
-  modInfo(): unknown {
-    return {
+rpc.exports = defineInstrument({
+  info: read({
+    label: "About this Instrument",
+    category: "Start here",
+    doc: "Tested build, runtime, safety boundary, and required game-data step",
+  }, () => ({
       game: "The Battle Cats KR",
       package: "jp.co.ponos.battlecatskr",
       testedVersion: "15.5.0",
@@ -100,14 +103,74 @@ const surface = {
       runtime: "Java Activity + custom native libnative-lib.so",
       safety: "Read-only discovery and reversible local QoL only; no currency, purchase, event, or server-state modification.",
       liveBlocker: "620 MB game-data download is required before a battle scene can be tested.",
-    };
-  },
-  async modState(): Promise<unknown> {
-    return { activity: await activityState(), performance: frameMeter.status(), touch: touchStatus() };
-  },
-  runtimeRead,
-  dataCatalog(): unknown {
-    return [
+  })),
+  state: read({
+    label: "Active changes",
+    category: "Start here",
+    doc: "Window flag, FPS meter, touch monitor, and clean state",
+  }, async () => ({ activity: await activityState(), performance: frameMeter.status(), touch: touchStatus() })),
+  actions: {
+    qolKeepAwake: control({
+      label: "Keep screen awake",
+      category: "QoL",
+      args: [field.checkbox("enabled", { label: "Keep screen awake" })],
+      doc: "Toggle the Activity window flag; reset restores its original value",
+      status: "modState",
+    }, (enabled: boolean) => windowControl.setKeepScreenOn(enabled)),
+    performanceStart: hook({
+      label: "FPS meter",
+      category: "QoL",
+      doc: "Observe EGL frames without changing rendering",
+      returns: "verification",
+      status: "performanceStatus",
+    }, () => frameMeter.start()),
+    performanceStop: control({
+      label: "Stop FPS meter",
+      category: "QoL",
+      doc: "Detach the owned EGL listener",
+      returns: "verification",
+      status: "performanceStatus",
+    }, () => frameMeter.stop()),
+    performanceStatus: read({
+      label: "FPS meter status",
+      category: "QoL",
+      doc: "Frame count, measured FPS, and firing verification",
+      returns: "verification",
+    }, () => frameMeter.status()),
+    touchMonitorStart: hook({
+      label: "Touch monitor",
+      category: "Debug",
+      doc: "Count native appTouch calls without changing input",
+      capabilities: ["instrument", "debug"],
+      returns: "verification",
+      status: "touchMonitorStatus",
+    }, touchStart),
+    touchMonitorStop: control({
+      label: "Stop touch monitor",
+      category: "Debug",
+      doc: "Detach the owned touch listener",
+      capabilities: ["instrument", "debug"],
+      returns: "verification",
+      status: "touchMonitorStatus",
+    }, touchStop),
+    touchMonitorStatus: read({
+      label: "Touch monitor status",
+      category: "Debug",
+      doc: "Hook address, event count, and firing verification",
+      capabilities: ["instrument", "analysis", "debug"],
+      returns: "verification",
+    }, touchStatus),
+    runtimeRead: read({
+      label: "Native runtime details",
+      category: "Discovery",
+      doc: "Live module and bounded JNI export inventory",
+    }, runtimeRead),
+    dataCatalog: read({
+      label: "Discovered game systems",
+      category: "Discovery",
+      doc: "APK/native evidence and explicit unsupported mutation rows",
+      returns: "table",
+    }, () => [
       { subsystem: "Units", evidence: "UnitLocal.list / unit*.csv", read: true, modify: false, reason: "runtime format not yet mapped" },
       { subsystem: "Enemies", evidence: "Enemyname.tsv / EnemyPictureBook*.csv", read: true, modify: false, reason: "playable data not downloaded" },
       { subsystem: "Stages", evidence: "MapLocal.list / stage*.csv", read: true, modify: false, reason: "playable data not downloaded" },
@@ -115,37 +178,20 @@ const surface = {
       { subsystem: "Battle", evidence: "BattleInit/BattleFinish/battle_* native strings", read: true, modify: false, reason: "no live battle scene" },
       { subsystem: "Save", evidence: "SAVE_DATA / SaveDataTransfer native strings", read: true, modify: false, reason: "save mutation intentionally excluded" },
       { subsystem: "Content", evidence: "pack/list asset pipeline", read: true, create: false, reason: "no runtime factory or supported asset-registration path proven" },
-    ];
+    ]),
+    ...recordingInstrumentActions(),
   },
-  async qolKeepAwake(enabled: boolean): Promise<unknown> { return windowControl.setKeepScreenOn(enabled); },
-  performanceStart(): unknown { return frameMeter.start(); },
-  performanceStatus(): unknown { return frameMeter.status(); },
-  performanceStop(): unknown { return frameMeter.stop(); },
-  touchMonitorStart: touchStart,
-  touchMonitorStatus: touchStatus,
-  touchMonitorStop: touchStop,
-  resetAll,
-  async dispose(): Promise<unknown> { return resetAll(); },
-  __describe(): unknown {
-    return [
-      { name: "modInfo", label: "About this game mod and blocker", category: "Start here", doc: "Tested build, runtime, safety boundary, and required 620 MB game-data step", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "modState", label: "Show every active change", category: "Start here", doc: "Window flag and owned listener state", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "runtimeRead", label: "Native runtime details", category: "Discovery", doc: "Live module and bounded Battle Cats JNI export inventory", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "dataCatalog", label: "Discovered game systems", category: "Discovery", doc: "APK/native evidence and explicit unsupported mutation rows", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
-      { name: "qolKeepAwake", label: "Keep screen awake", category: "QoL", args: [{ name: "enabled", type: "boolean", ui: { control: "checkbox", label: "Keep screen awake" } }], doc: "Toggle the game Activity window flag; resetAll restores its original value", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
-      { name: "performanceStart", label: "Start FPS meter", category: "QoL", doc: "Observe EGL frames without changing rendering", capabilities: ["instrument"], effect: "hook", returns: "verification", statusAction: "performanceStatus" },
-      { name: "performanceStatus", label: "FPS meter status", category: "QoL", doc: "Frame count, measured FPS, and firing verification", capabilities: ["instrument", "analysis"], effect: "read", returns: "verification" },
-      { name: "performanceStop", label: "Stop FPS meter", category: "QoL", doc: "Detach the owned EGL listener", capabilities: ["instrument"], effect: "control", returns: "verification", statusAction: "performanceStatus" },
-      { name: "touchMonitorStart", label: "Start touch monitor", category: "Debug", doc: "Count calls to the game's native appTouch bridge without changing input", capabilities: ["instrument", "debug"], effect: "hook", returns: "verification", statusAction: "touchMonitorStatus" },
-      { name: "touchMonitorStatus", label: "Touch monitor status", category: "Debug", doc: "Hook address, event count, and firing verification", capabilities: ["instrument", "analysis", "debug"], effect: "read", returns: "verification" },
-      { name: "touchMonitorStop", label: "Stop touch monitor", category: "Debug", doc: "Detach the owned touch listener", capabilities: ["instrument", "debug"], effect: "control", returns: "verification", statusAction: "touchMonitorStatus" },
-      { name: "resetAll", label: "Reset every reversible change", category: "Start here", doc: "Detach listeners and restore the Activity window flag", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
-      { name: "dispose", label: "Dispose mod", category: "Debug", doc: "Cleanup alias used before reload or detach", capabilities: ["instrument", "debug"], effect: "control", returns: "json" },
-      ...recordingDescriptors(),
-      { name: "__describe", doc: "This descriptor" },
-    ];
-  },
-};
-
-rpc.exports = surface;
+  reset: control({
+    label: "Reset every reversible change",
+    category: "Start here",
+    doc: "Detach listeners and restore the Activity window flag",
+    status: "modState",
+  }, resetAll),
+  dispose: control({
+    label: "Dispose Instrument",
+    category: "Debug",
+    doc: "Cleanup alias used before reload or detach",
+    capabilities: ["instrument", "debug"],
+  }, resetAll),
+});
 ok("[battlecatskr] native discovery/QoL target ready; gameplay writes blocked until data is installed");

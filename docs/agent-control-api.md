@@ -187,7 +187,9 @@ of `input`, `checkbox`, `slider`, or `select`; sliders include finite
 Agents should preserve this metadata when authoring source because the human TUI
 uses it for forms and linked `statusAction` state, but agents still call the
 stable action name with positional typed arguments. flab generates console help
-from this schema; targets do not need a `modHelp()` action.
+from this schema. Target source should use `defineInstrument()` and `field.*` so
+RPC handlers, descriptors, widgets, and help come from one declaration; targets
+do not need parallel descriptor arrays or a `modHelp()` action.
 
 Create a distributable artifact after static and live verification:
 

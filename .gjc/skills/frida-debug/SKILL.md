@@ -13,8 +13,8 @@ are in `frida-labs/CLAUDE.md`.
 
 ```sh
 cd frida-labs
-flab run <target>                # attach
-flab run <target> --spawn        # spawn
+flab run <target> --console                # attach in expert console
+flab run <target> --spawn --console        # spawn in expert console
 flab tui <target>                # ink TUI instead of the REPL
 flab probe --pid <positive-pid>   # attach unambiguously by PID
 ```

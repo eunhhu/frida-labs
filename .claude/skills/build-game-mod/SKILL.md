@@ -10,10 +10,11 @@ Read `docs/agent-game-mod-guide.md` in full and execute every applicable phase.
 Resolve `GAME`, `PROCESS`, `DEVICE`, `MODE`, and `FEATURES`; discover missing
 facts on the exact device. Recon with the persistent generic probe before
 scaffolding; when a human can perform one isolated action, capture bounded
-`record.plan/start/status/stop/summary/read` evidence. Implement one target whose truthful `__describe()` descriptors,
-including human `label`, `category`, and argument `ui` controls, drive the TUI,
-advanced console, and NDJSON Agent API. Let flab generate help from descriptors; do not add
-target-local `modHelp()` boilerplate. Provide discovery/state/cleanup actions, evidence-based subsystem
+`record.plan/start/status/stop/summary/read` evidence. Implement one target with
+`defineInstrument()` and `field.*`; declare each action once so flab generates
+`rpc.exports`, truthful `__describe()`, human controls, advanced console help,
+and NDJSON actions. Do not add parallel handler/descriptor arrays or target-local
+`modHelp()` boilerplate. Provide discovery/state/cleanup actions, evidence-based subsystem
 coverage, an objectives/win-loss and economy/reward semantic model, and
 game-specific aim assist, ESP/awareness, movement assistance, accessibility, and
 training candidates. Ship only discovered, bounded, default-off features;

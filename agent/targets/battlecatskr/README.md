@@ -9,8 +9,8 @@ than guessed.
 ## Start
 
 ```sh
-bun run flab -- tui battlecatskr --device R3CWB0GCWMX
 bun run flab -- run battlecatskr --device R3CWB0GCWMX --no-watch
+bun run flab -- run battlecatskr --device R3CWB0GCWMX --console --no-watch
 bun run flab -- run battlecatskr --device R3CWB0GCWMX --session --json --no-watch
 ```
 
@@ -18,7 +18,7 @@ The app must already be running. Bundle-id attach is supported even when Frida
 shows the localized process name `냥코 대전쟁`. Override the saved device with
 `--device usb`, another exact id, or `--host host:port`.
 
-Safe advanced-console calls available before the data download:
+Safe expert-console calls (`--console`) available before the data download:
 
 ```js
 await modInfo()

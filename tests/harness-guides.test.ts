@@ -74,6 +74,7 @@ test("every coding harness resolves the same game-mod completion contract", () =
     expect(skill).toContain("flab acp");
     expect(skill).toContain("flab mcp");
     expect(skill).toContain("record.plan");
+    expect(skill).toContain("defineInstrument()");
     expect(skill).not.toContain("TODO");
   }
 });
@@ -124,12 +125,20 @@ test("harness-native invocation adapters remain discoverable", () => {
   expect(openCode).toContain("win-loss");
   expect(openCode).toContain("aim assist");
   expect(openCode).toContain("offline confirmation");
+  expect(openCode).toContain("defineInstrument()");
 
   const ignore = read(".gitignore");
   expect(ignore).toContain("!.gjc/config.yml");
   expect(ignore).toContain("!.gjc/skills/*/SKILL.md");
 });
 
-test("game targets rely on generated descriptor help instead of modHelp boilerplate", () => {
-  for (const path of gameTargetPaths) expect(read(path)).not.toMatch(/\bmodHelp\s*\(/);
+test("game targets declare one generated Instrument surface without export/help boilerplate", () => {
+  for (const path of gameTargetPaths) {
+    const source = read(path);
+    expect(source).toContain("rpc.exports = defineInstrument({");
+    expect(source).toContain("recordingInstrumentActions()");
+    expect(source).not.toContain("rpc.exports = {");
+    expect(source).not.toContain("__describe():");
+    expect(source).not.toMatch(/\bmodHelp\s*\(/);
+  }
 });

@@ -6,6 +6,14 @@ competitive play.
 
 ## Flow
 
+Human dashboard:
+
+```sh
+bun run flab -- run piu
+```
+
+Equivalent expert-console calls (`--console`):
+
 ```js
 await modState()
 await toggle(true, true)
