@@ -616,7 +616,18 @@ export async function startSession(opts: SessionOptions, ev: SessionEvents): Pro
         name: descriptor.name,
         ...(descriptor.label ? { label: descriptor.label } : {}),
         ...(descriptor.category ? { category: descriptor.category } : {}),
-        args: descriptor.args.map((arg) => ({ ...arg })),
+        args: descriptor.args.map((arg) => {
+          const { options, ...ui } = arg.ui;
+          return {
+            name: arg.name,
+            type: arg.type,
+            optional: arg.optional,
+            ui: {
+              ...ui,
+              ...(options ? { options: options.map((option) => ({ ...option })) } : {}),
+            },
+          };
+        }),
         ...(descriptor.doc ? { doc: descriptor.doc } : {}),
         capabilities: [...descriptor.capabilities],
         effect: descriptor.effect,

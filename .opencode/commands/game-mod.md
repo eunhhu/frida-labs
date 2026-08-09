@@ -10,7 +10,8 @@ User request: $ARGUMENTS
 
 Do not stop after recon, planning, or scaffolding. Prefer the ACP/MCP Agent
 surface and use bounded human-play Record evidence when available. Implement
-and verify the TUI menu, REPL, persistent AI action surface, cleanup/reattach path, coverage report,
+and verify the descriptor-driven TUI controls (input, checkbox, slider, select,
+and linked live state), advanced-console help, persistent AI action surface, cleanup/reattach path, coverage report,
 objectives/win-loss and economy/reward semantic model, discovered aim assist,
 ESP/awareness, movement assistance and accessibility/training features, and
 target-local usage. Continuous assists require an engagement gate and explicit

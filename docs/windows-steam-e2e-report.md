@@ -7,8 +7,8 @@
 - Authorization: user-owned offline installs.
 - Method: one game at a time, main-menu compatibility only; read-only generic
   probe, engine/module discovery, Record surface, cleanup, and clean reattach.
-- Registered Instruments additionally exercised `modInfo`, `modHelp`,
-  `modState`, cleanup, and clean target reattach.
+- Registered Instruments additionally exercised `modInfo`, `modState`,
+  generated descriptor help, cleanup, and clean target reattach.
 - Registered-target feature runs used bounded synthetic input and target
   actions inside owned offline/private scenarios. No anti-cheat bypass, public
   match, or production economy interaction was attempted.

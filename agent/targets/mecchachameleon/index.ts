@@ -1,6 +1,6 @@
 // Target entry: MECCHA CHAMELEON (PenguinHotel-Win64-Shipping.exe).
 // Build:  flab build mecchachameleon   (frida-compile -> _agent.js)
-// Drive:  flab run mecchachameleon     (REPL over rpc.exports)
+// Drive:  flab run mecchachameleon     (advanced console over rpc.exports)
 //
 // Everything here is game-specific glue; the heavy lifting lives in ../../lib.
 
@@ -164,14 +164,6 @@ rpc.exports = {
       flight: "not exposed: this build uses Mover rather than CharacterMovementComponent",
     };
   },
-  modHelp() {
-    return [
-      "1. espSnapshot() to inspect classified actors",
-      "2. espInstall() / espRemove() for the owned overlay",
-      "3. moveRead(), moveApply({...}), moveEnforce(true), moveReset()",
-      "4. resetAll() before detach or reload",
-    ];
-  },
   modState() { return { esp: esp.status(), movement: ue.moverMovement.status() }; },
   info() {
     return {
@@ -253,19 +245,18 @@ rpc.exports = {
   __describe(): unknown {
     return [
       { name: "modInfo", label: "About this game mod", category: "Start here", doc: "Runtime, safety boundary, and unsupported aim path", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "modHelp", label: "Show the quick guide", category: "Start here", doc: "ESP, movement, and cleanup flow", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
       { name: "modState", label: "Show every active change", category: "Start here", doc: "Owned overlay and movement state", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
       { name: "info", label: "Read UE runtime facts", category: "Discovery", doc: "UE object array / module facts", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
       { name: "classes", label: "List package classes", category: "Discovery", args: [{ name: "pkg", type: "string?" }], doc: "Classes in a UE package", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
       { name: "moveProbe", label: "Inspect the controlled pawn", category: "Discovery", doc: "Bounded controller/pawn UObject graph used to calibrate movement on a live build", capabilities: ["analysis"], effect: "read", returns: "json" },
       { name: "espSnapshot", label: "Preview classified actors", category: "Visual", args: [{ name: "w", type: "integer?" }, { name: "h", type: "integer?" }], doc: "Bounded one-shot ESP data without drawing", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
-      { name: "espInstall", label: "Enable awareness overlay", category: "Visual", args: [{ name: "offlineConfirmed", type: "boolean" }], doc: "Install the owned ESP render hook in an explicitly confirmed offline scene", capabilities: ["instrument", "debug"], effect: "hook", returns: "scalar", statusAction: "espStatus" },
+      { name: "espInstall", label: "Enable awareness overlay", category: "Visual", args: [{ name: "offlineConfirmed", type: "boolean", ui: { control: "checkbox", label: "Owned offline session" } }], doc: "Install the owned ESP render hook in an explicitly confirmed offline scene", capabilities: ["instrument", "debug"], effect: "hook", returns: "scalar", statusAction: "espStatus" },
       { name: "espRemove", label: "Disable awareness overlay", category: "Visual", doc: "Remove the ESP hook and refresh timer", capabilities: ["instrument", "debug"], effect: "control", returns: "scalar", statusAction: "espStatus" },
-      { name: "espTest", label: "Toggle overlay test box", category: "Debug", args: [{ name: "on", type: "boolean" }, { name: "offlineConfirmed", type: "boolean?" }], doc: "Draw a test box at screen center; confirmation is required when enabling", capabilities: ["instrument", "debug"], effect: "control", returns: "scalar", statusAction: "espStatus" },
+      { name: "espTest", label: "Toggle overlay test box", category: "Debug", args: [{ name: "on", type: "boolean", ui: { control: "checkbox", label: "Test box" } }, { name: "offlineConfirmed", type: "boolean?", ui: { control: "checkbox", label: "Owned offline session" } }], doc: "Draw a test box at screen center; confirmation is required when enabling", capabilities: ["instrument", "debug"], effect: "control", returns: "scalar", statusAction: "espStatus" },
       { name: "espStatus", label: "Read awareness status", category: "Visual", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
       { name: "moveRead", label: "Read movement values", category: "Movement", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "moveApply", label: "Apply a movement profile", category: "Movement", args: [{ name: "opts", type: "json" }, { name: "offlineConfirmed", type: "boolean" }], doc: "UE5 Mover fields: walk, accel, jump, air, friction, brake; originals are captured before first write", capabilities: ["instrument"], effect: "write", returns: "json", statusAction: "moveStatus" },
-      { name: "moveEnforce", label: "Keep movement profile active", category: "Movement", args: [{ name: "on", type: "boolean" }, { name: "offlineConfirmed", type: "boolean?" }, { name: "ms", type: "integer?" }], doc: "Re-resolve components across respawns; confirmation is required when enabling", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "moveStatus" },
+      { name: "moveApply", label: "Apply a movement profile", category: "Movement", args: [{ name: "opts", type: "json", ui: { control: "input", label: "Movement values", default: "{\"walk\":900}", placeholder: "{\"walk\":900,\"jump\":700}" } }, { name: "offlineConfirmed", type: "boolean", ui: { control: "checkbox", label: "Owned offline session" } }], doc: "UE5 Mover fields: walk, accel, jump, air, friction, brake; originals are captured before first write", capabilities: ["instrument"], effect: "write", returns: "json", statusAction: "moveStatus" },
+      { name: "moveEnforce", label: "Keep movement profile active", category: "Movement", args: [{ name: "on", type: "boolean", ui: { control: "checkbox", label: "Continuous enforcement" } }, { name: "offlineConfirmed", type: "boolean?", ui: { control: "checkbox", label: "Owned offline session" } }, { name: "ms", type: "integer?", ui: { control: "slider", label: "Refresh interval (ms)", min: 50, max: 5000, step: 50, default: 250 } }], doc: "Re-resolve components across respawns; confirmation is required when enabling", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "moveStatus" },
       { name: "moveStatus", label: "Read movement Instrument status", category: "Movement", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
       { name: "moveReset", label: "Restore original movement", category: "Movement", doc: "Restore captured live values, not assumed engine defaults", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "moveStatus" },
       { name: "resetAll", label: "Reset every reversible change", category: "Start here", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },

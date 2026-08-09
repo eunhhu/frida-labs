@@ -102,16 +102,6 @@ const surface = {
       liveBlocker: "620 MB game-data download is required before a battle scene can be tested.",
     };
   },
-  modHelp(): unknown {
-    return [
-      "BLOCKED: accept the in-game 620 MB data download and open an offline battle before gameplay mods can be mapped",
-      "QoL: qolKeepAwake(true|false)",
-      "Performance: performanceStart(), performanceStatus(), performanceStop()",
-      "Input diagnostics: touchMonitorStart(), touchMonitorStatus(), touchMonitorStop()",
-      "Discovery: runtimeRead(), dataCatalog()",
-      "Cleanup: resetAll()",
-    ];
-  },
   async modState(): Promise<unknown> {
     return { activity: await activityState(), performance: frameMeter.status(), touch: touchStatus() };
   },
@@ -139,11 +129,10 @@ const surface = {
   __describe(): unknown {
     return [
       { name: "modInfo", label: "About this game mod and blocker", category: "Start here", doc: "Tested build, runtime, safety boundary, and required 620 MB game-data step", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "modHelp", label: "Show current blocker and commands", category: "Start here", doc: "Required gameplay-data step, safe diagnostics, and cleanup", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
       { name: "modState", label: "Show every active change", category: "Start here", doc: "Window flag and owned listener state", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
       { name: "runtimeRead", label: "Native runtime details", category: "Discovery", doc: "Live module and bounded Battle Cats JNI export inventory", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
       { name: "dataCatalog", label: "Discovered game systems", category: "Discovery", doc: "APK/native evidence and explicit unsupported mutation rows", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
-      { name: "qolKeepAwake", label: "Keep screen awake", category: "QoL", args: [{ name: "enabled", type: "boolean" }], doc: "Toggle the game Activity window flag; resetAll restores its original value", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
+      { name: "qolKeepAwake", label: "Keep screen awake", category: "QoL", args: [{ name: "enabled", type: "boolean", ui: { control: "checkbox", label: "Keep screen awake" } }], doc: "Toggle the game Activity window flag; resetAll restores its original value", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
       { name: "performanceStart", label: "Start FPS meter", category: "QoL", doc: "Observe EGL frames without changing rendering", capabilities: ["instrument"], effect: "hook", returns: "verification", statusAction: "performanceStatus" },
       { name: "performanceStatus", label: "FPS meter status", category: "QoL", doc: "Frame count, measured FPS, and firing verification", capabilities: ["instrument", "analysis"], effect: "read", returns: "verification" },
       { name: "performanceStop", label: "Stop FPS meter", category: "QoL", doc: "Detach the owned EGL listener", capabilities: ["instrument"], effect: "control", returns: "verification", statusAction: "performanceStatus" },

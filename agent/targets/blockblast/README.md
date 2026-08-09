@@ -16,7 +16,7 @@ purchases, ads, and remote values are excluded.
 # Human menu: Start here → Progress/Content/Gameplay
 bun run flab -- tui blockblast --device R3CWB0GCWMX
 
-# Human JavaScript REPL
+# Advanced human console
 bun run flab -- run blockblast --device R3CWB0GCWMX --no-watch
 
 # One persistent AI session; send NDJSON on stdin

@@ -7,7 +7,7 @@
 // Each tick re-fetches Main.player[Main.myPlayer] (the managed object can move under
 // GC) and re-applies every enabled toggle.
 //
-// Commands run from the host REPL (await cmd("give 757 1")) or the game's own
+// Commands run from the host console (await cmd("give 757 1")) or the game's own
 // chat box: open chat in-game and type a slash command ("/heal", "/give 757 1").
 // The managed chat send path can't be hooked (Interceptor crashes on Mono JIT),
 // but the native SDL_PollEvent pump is safe: on the Enter that submits a
@@ -666,13 +666,6 @@ rpc.exports = {
       cleanup: "resetAll/dispose stops the timer and chat hook; one-shot world/inventory commands are labeled non-restoring",
     };
   },
-  modHelp() {
-    return [
-      "1. modState() confirms no hook, timer, or feature is active after attach",
-      "2. set(id, true, true) or cmd(raw, true) only in owned offline play",
-      "3. resetAll() stops continuous enforcement; one-shot command effects may persist",
-    ];
-  },
   modState() {
     if (WINDOWS_CLR) return activeInstrument().state();
     return instrument?.state() ?? { initialized: false, enabled: [], clean: true };
@@ -695,11 +688,10 @@ rpc.exports = {
   __describe(): unknown {
     return [
       { name: "modInfo", label: "About this Instrument", category: "Start here", doc: "Runtime, offline safety boundary, and cleanup limitations", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "modHelp", label: "Show the quick guide", category: "Start here", doc: "Explicit offline activation and cleanup flow", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
       { name: "modState", label: "Show active features", category: "Start here", doc: "Lazy initialization, enabled feature ids, and clean state", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
       { name: "playerSnapshot", label: "Read live player values", category: "Player", doc: "Structured HP, mana, breath, movement, environment, summon, position, world, and apply-tick readback", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "cmd", label: "Run a Terraria command", category: "Player", args: [{ name: "raw", type: "string" }, { name: "offlineConfirmed", type: "boolean?" }], doc: "Mutating commands require offlineConfirmed=true; one-shot effects may persist", capabilities: ["instrument"], effect: "control", returns: "scalar" },
-      { name: "set", label: "Toggle continuous feature", category: "Training", args: [{ name: "id", type: "string" }, { name: "on", type: "boolean" }, { name: "offlineConfirmed", type: "boolean?" }], doc: "Enabling requires offlineConfirmed=true and starts the owned timer lazily", capabilities: ["instrument"], effect: "control", returns: "scalar", statusAction: "modState" },
+      { name: "cmd", label: "Run a Terraria command", category: "Player", args: [{ name: "raw", type: "string", ui: { control: "input", label: "Command", placeholder: "heal | give 757 1 | time day" } }, { name: "offlineConfirmed", type: "boolean?", ui: { control: "checkbox", label: "Owned offline session" } }], doc: "Mutating commands require offlineConfirmed=true; one-shot effects may persist", capabilities: ["instrument"], effect: "control", returns: "scalar" },
+      { name: "set", label: "Toggle continuous feature", category: "Training", args: [{ name: "id", type: "string", ui: { control: "select", label: "Feature", options: [{ label: "God mode", value: "god" }, { label: "Infinite mana", value: "mana" }, { label: "Infinite breath", value: "breath" }, { label: "No knockback", value: "nokb" }, { label: "Flight", value: "fly" }, { label: "Environment immunity", value: "env" }, { label: "Max summons", value: "maxsummon" }, { label: "Fast use", value: "fastuse" }, { label: "Map teleport", value: "maptp" }] } }, { name: "on", type: "boolean", ui: { control: "checkbox", label: "Enabled" } }, { name: "offlineConfirmed", type: "boolean?", ui: { control: "checkbox", label: "Owned offline session" } }], doc: "Enabling requires offlineConfirmed=true and starts the owned timer lazily", capabilities: ["instrument"], effect: "control", returns: "scalar", statusAction: "modState" },
       { name: "resetAll", label: "Stop continuous features", category: "Start here", doc: "Disable features and remove the timer/chat hook", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
       { name: "dispose", label: "Dispose owned handles", category: "Start here", doc: "Automatic detach cleanup", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
       ...recordingDescriptors(),

@@ -238,11 +238,17 @@ export function controlCapabilities(): Record<string, unknown> {
       "record.plan", "record.start", "record.status", "record.stop", "record.list", "record.read", "record.summary",
     ],
     interfaces: {
-      human: "flab TUI: Connect → Analyze → Instrument",
+      human: "flab TUI: Connect → Analyze → Instrument controls + linked live state",
       agent: "flab agent --json",
       acp: "flab acp: auto-detected ACP agent + injected flab MCP tools",
       mcp: "flab mcp: two-tool bridge for any MCP-capable harness",
       live: "descriptor-driven session actions shared with the TUI",
+    },
+    descriptorUi: {
+      controls: ["input", "checkbox", "slider", "select"],
+      state: "statusAction or zero-argument modState",
+      help: "host-generated .help, /help, and :help",
+      invariant: "stable action names and positional arguments remain identical for agents",
     },
   };
 }

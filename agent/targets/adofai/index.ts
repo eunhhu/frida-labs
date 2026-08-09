@@ -1,7 +1,7 @@
 // Target entry: A Dance of Fire and Ice (Unity, Mono backend).
 // Build/run:  flab run adofai
 //
-// All the heavy lifting is in ../../lib/mono — this only exposes rpc for the REPL.
+// All the heavy lifting is in ../../lib/mono — this only exposes target RPC glue.
 
 import { ok } from "../../lib/log.js";
 import type { Verification } from "../../lib/hook.js";
@@ -154,13 +154,6 @@ rpc.exports = {
       facts: runtimeInfo(),
     };
   },
-  modHelp() {
-    return [
-      "1. info(), assemblies(), or classes(pattern) for read-only discovery",
-      "2. load an offline level, then assistApply({noFail:true}, true)",
-      "3. assistReset() or resetAll() restores captured live values",
-    ];
-  },
   modState() {
     return {
       traces: [...traces].map((trace) => trace.status()),
@@ -223,18 +216,17 @@ rpc.exports = {
   __describe(): unknown {
     return [
       { name: "modInfo", label: "About this Instrument", category: "Start here", doc: "Runtime, safety boundary, and live discovery coverage", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "modHelp", label: "Show the quick guide", category: "Start here", doc: "Three-step discovery, tracing, and cleanup flow", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
       { name: "modState", label: "Show active traces", category: "Start here", doc: "Firing state for every owned managed trace", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
       { name: "info", label: "Read Mono runtime facts", category: "Discovery", doc: "Assembly/image/class counts", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
       { name: "assemblies", label: "List loaded assemblies", category: "Discovery", doc: "Loaded assembly image names", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
-      { name: "classes", label: "List managed classes", category: "Discovery", args: [{ name: "pattern", type: "string?" }], doc: "Assembly-CSharp classes with optional regex filter", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
+      { name: "classes", label: "List managed classes", category: "Discovery", args: [{ name: "pattern", type: "string?", ui: { control: "input", label: "Class filter", placeholder: "optional regex" } }], doc: "Assembly-CSharp classes with optional regex filter", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
       { name: "methods", label: "List class methods", category: "Discovery", args: [{ name: "className", type: "string" }, { name: "ns", type: "string?" }], capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
       { name: "fields", label: "List class fields", category: "Discovery", args: [{ name: "className", type: "string" }, { name: "ns", type: "string?" }], capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
       { name: "address", label: "Resolve method address", category: "Discovery", args: [{ name: "className", type: "string" }, { name: "method", type: "string" }, { name: "ns", type: "string?" }], capabilities: ["instrument", "analysis"], effect: "read", returns: "scalar" },
       { name: "trace", label: "Trace managed method", category: "Debug", args: [{ name: "className", type: "string" }, { name: "method", type: "string" }, { name: "ns", type: "string?" }], doc: "Owned firing-verified trace; resetAll detaches it", capabilities: ["instrument", "debug"], effect: "hook", returns: "verification", statusAction: "modState" },
       { name: "assistRead", label: "Read gameplay assistance", category: "Gameplay", doc: "Live scrController readiness, values, enforcement, and write receipts", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "assistApply", label: "Apply gameplay assistance", category: "Gameplay", args: [{ name: "opts", type: "json" }, { name: "offlineConfirmed", type: "boolean" }], doc: "Apply noFail, infiniteMargin, or freeroamInvulnerability with immediate readback", capabilities: ["instrument"], effect: "write", returns: "verification", statusAction: "assistRead" },
-      { name: "assistEnforce", label: "Keep assistance active", category: "Gameplay", args: [{ name: "on", type: "boolean" }, { name: "offlineConfirmed", type: "boolean?" }, { name: "intervalMs", type: "integer?" }], doc: "Re-resolve the live controller across level transitions", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "assistRead" },
+      { name: "assistApply", label: "Apply gameplay assistance", category: "Gameplay", args: [{ name: "opts", type: "json", ui: { control: "input", label: "Assistance values", default: "{\"noFail\":true}", placeholder: "{\"noFail\":true}" } }, { name: "offlineConfirmed", type: "boolean", ui: { control: "checkbox", label: "Owned offline session" } }], doc: "Apply noFail, infiniteMargin, or freeroamInvulnerability with immediate readback", capabilities: ["instrument"], effect: "write", returns: "verification", statusAction: "assistRead" },
+      { name: "assistEnforce", label: "Keep assistance active", category: "Gameplay", args: [{ name: "on", type: "boolean", ui: { control: "checkbox", label: "Continuous enforcement" } }, { name: "offlineConfirmed", type: "boolean?", ui: { control: "checkbox", label: "Owned offline session" } }, { name: "intervalMs", type: "integer?", ui: { control: "slider", label: "Refresh interval (ms)", min: 50, max: 5000, step: 50, default: 250 } }], doc: "Re-resolve the live controller across level transitions", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "assistRead" },
       { name: "assistReset", label: "Restore gameplay assistance", category: "Gameplay", doc: "Stop enforcement and restore captured live values", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "assistRead" },
       { name: "resetAll", label: "Stop every trace", category: "Start here", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
       { name: "dispose", label: "Dispose owned handles", category: "Start here", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },

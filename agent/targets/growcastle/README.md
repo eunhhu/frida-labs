@@ -14,7 +14,7 @@ crystals, purchases, ads, and remote state are excluded.
 # Human menu: Start here → Progress/Inventory/Skills/Battle
 bun run flab -- tui growcastle --device R3CWB0GCWMX
 
-# Human JavaScript REPL
+# Advanced human console
 bun run flab -- run growcastle --device R3CWB0GCWMX --no-watch
 
 # One persistent AI session; send NDJSON on stdin

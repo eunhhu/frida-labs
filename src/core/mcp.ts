@@ -108,7 +108,7 @@ export function createFlabMcpServer(options: FlabMcpServerOptions = {}): {
             `Analyze my authorized game ${game} (${process}) on ${device}.`,
             `Priorities: ${features}.`,
             "Use flab MCP only after an explicit authorization profile.",
-            "Prefer Record-assisted controlled experiments: plan bounded hooks, record one natural human-play action, summarize timing/arguments/returns, implement the Instrument, build, verify, clean up, reattach, and package.",
+            "Prefer Record-assisted controlled experiments: plan bounded hooks, record one natural human-play action, summarize timing/arguments/returns, implement descriptor UI controls and linked state, build, verify, clean up, reattach, and package.",
           ].join(" "),
         },
       }],

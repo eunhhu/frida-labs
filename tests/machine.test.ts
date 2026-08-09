@@ -81,6 +81,10 @@ test("machine capabilities expose the complete managed lifecycle", () => {
       stop: expect.stringContaining("instrumentStopAll"),
       delete: expect.stringContaining("instrumentDelete"),
     },
+    descriptorUi: {
+      controls: ["input", "checkbox", "slider", "select"],
+      state: expect.stringContaining("statusAction"),
+    },
     analysisRecord: { flow: expect.arrayContaining(["record.plan", "record.summary"]) },
   });
 });

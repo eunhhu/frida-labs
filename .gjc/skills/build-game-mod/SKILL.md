@@ -10,8 +10,10 @@ gate. Resolve the request's game, process, device, attach/spawn mode, and featur
 priorities. Recon the exact selected device before scaffolding. When a human can
 perform one isolated action, use bounded `record.plan/start/status/stop/summary/read`
 evidence. Build one target
-whose live descriptors, human labels, and categories form the TUI and the same
-REPL/NDJSON Agent surface. Produce subsystem coverage, safe reversible
+whose live descriptors, human labels, categories, and argument UI metadata form
+input, checkbox, slider, and select controls in the TUI and the same advanced console/NDJSON
+Agent surface. flab generates help from descriptors; do not implement a
+target-local `modHelp()` export. Produce subsystem coverage, safe reversible
 actions, an objectives/win-loss and economy/reward semantic model, and discovered
 aim assist, ESP/awareness, movement assistance, accessibility, and training features.
 Continuous assists stay off by default, require a live engagement gate and

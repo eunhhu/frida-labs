@@ -11,7 +11,7 @@ bun src/bin.ts run terraria --device local
 bun src/bin.ts run terraria --host <host:port> --session --json
 ```
 
-Human TUI, REPL, selected-session JSON, ACP, and MCP all call the same live
+Human TUI, advanced console, selected-session JSON, ACP, and MCP all call the same live
 descriptors. Continuous mutations start disabled and require
 `offlineConfirmed=true` when enabled.
 

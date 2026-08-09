@@ -387,15 +387,6 @@ const surface = {
       cleanup: "Score/chapter and survival mode are resettable. Clear-board is an explicit one-shot board action.",
     };
   },
-  modHelp(): unknown {
-    return [
-      "Read: progressRead(), survivalStatus()",
-      "Progress: scoreSet(value, true), adventureUnlockThrough(level, true), then gameReload()",
-      "Play: survivalSetEnabled(true|false); classicBoardClearNow(true) only inside a classic score board",
-      "Cleanup: resetAll(); call gameReload() if restored save values must appear immediately",
-      "Safety: the true argument confirms a fully offline single-player session",
-    ];
-  },
   async modState(): Promise<unknown> {
     let survival: unknown;
     try { survival = await survivalStatus(); } catch (error) { survival = { available: false, error: errorText(error) }; }
@@ -425,18 +416,17 @@ const surface = {
   __describe(): unknown {
     return [
       { name: "modInfo", label: "About this game mod", category: "Start here", doc: "Tested build, runtime APIs, safety boundary, and reset coverage", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "modHelp", label: "Show the 4-step quick guide", category: "Start here", doc: "Read, modify, play, and reset commands", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
       { name: "modState", label: "Show every active change", category: "Start here", doc: "Score, chapters, survival traits, window, FPS meter, and reset ownership", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
       { name: "progressRead", label: "Read score and unlocked levels", category: "Progress", doc: "Read live typed save values without changing them", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "scoreSet", label: "Set current and best score", category: "Progress", args: [{ name: "score", type: "integer" }, { name: "offlineConfirmed", type: "boolean" }], doc: "Set 0..999,999,999 through the game's four local score keys; resetAll restores every original; reload required", capabilities: ["instrument"], effect: "write", returns: "json", statusAction: "progressRead" },
-      { name: "adventureUnlockThrough", label: "Unlock adventure through level", category: "Content", args: [{ name: "level", type: "integer" }, { name: "offlineConfirmed", type: "boolean" }], doc: "Unlock levels 1..96 through the game's chapter save API; resetAll restores the original; reload required", capabilities: ["instrument"], effect: "write", returns: "json", statusAction: "progressRead" },
-      { name: "survivalSetEnabled", label: "Toggle no-fail + unlimited revives", category: "Gameplay", args: [{ name: "enabled", type: "boolean" }], doc: "Dynamically activate four shipped classic/adventure survival traits; resetAll removes only traits owned by this session", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "survivalStatus" },
+      { name: "scoreSet", label: "Set current and best score", category: "Progress", args: [{ name: "score", type: "integer", ui: { control: "input", label: "Score", placeholder: "0..999999999" } }, { name: "offlineConfirmed", type: "boolean", ui: { control: "checkbox", label: "Owned offline session" } }], doc: "Set 0..999,999,999 through the game's four local score keys; resetAll restores every original; reload required", capabilities: ["instrument"], effect: "write", returns: "json", statusAction: "progressRead" },
+      { name: "adventureUnlockThrough", label: "Unlock adventure through level", category: "Content", args: [{ name: "level", type: "integer", ui: { control: "slider", label: "Adventure level", min: 1, max: 96, step: 1, default: 1 } }, { name: "offlineConfirmed", type: "boolean", ui: { control: "checkbox", label: "Owned offline session" } }], doc: "Unlock levels 1..96 through the game's chapter save API; resetAll restores the original; reload required", capabilities: ["instrument"], effect: "write", returns: "json", statusAction: "progressRead" },
+      { name: "survivalSetEnabled", label: "Toggle no-fail + unlimited revives", category: "Gameplay", args: [{ name: "enabled", type: "boolean", ui: { control: "checkbox", label: "No-fail + unlimited revives" } }], doc: "Dynamically activate four shipped classic/adventure survival traits; resetAll removes only traits owned by this session", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "survivalStatus" },
       { name: "survivalStatus", label: "Check survival traits", category: "Gameplay", doc: "Verify each shipped trait exists and is active in the live Cocos runtime", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "classicBoardClearNow", label: "Clear a classic board now", category: "Gameplay", args: [{ name: "offlineConfirmed", type: "boolean" }], doc: "Require a live classic score proxy, then call clearAllBlocksImmediate; adventure is rejected before mutation; one-shot and not undone by resetAll", capabilities: ["instrument"], effect: "write", returns: "json" },
+      { name: "classicBoardClearNow", label: "Clear a classic board now", category: "Gameplay", args: [{ name: "offlineConfirmed", type: "boolean", ui: { control: "checkbox", label: "Owned offline session" } }], doc: "Require a live classic score proxy, then call clearAllBlocksImmediate; adventure is rejected before mutation; one-shot and not undone by resetAll", capabilities: ["instrument"], effect: "write", returns: "json" },
       { name: "gameReload", label: "Reload game to apply save changes", category: "Progress", doc: "Call AppActivity.reLoadGame after score/chapter writes or restoration", capabilities: ["instrument"], effect: "control", returns: "json" },
       { name: "runtimeRead", label: "Show hooked game APIs", category: "Discovery", doc: "Live Cocos module, exact Java bridges, engine, process, and architecture", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
       { name: "featureCatalog", label: "Show mapped game systems", category: "Discovery", doc: "Runtime function/trait/storage evidence and callable status", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
-      { name: "qolKeepAwake", label: "Keep screen awake", category: "QoL", args: [{ name: "enabled", type: "boolean" }], doc: "Toggle the Activity flag; resetAll restores its original value", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
+      { name: "qolKeepAwake", label: "Keep screen awake", category: "QoL", args: [{ name: "enabled", type: "boolean", ui: { control: "checkbox", label: "Keep screen awake" } }], doc: "Toggle the Activity flag; resetAll restores its original value", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
       { name: "performanceStart", label: "Start FPS meter", category: "QoL", doc: "Observe EGL frames without changing gameplay", capabilities: ["instrument"], effect: "hook", returns: "verification", statusAction: "performanceStatus" },
       { name: "performanceStatus", label: "Check FPS meter", category: "QoL", doc: "Frame count, elapsed time, measured FPS, and callback evidence", capabilities: ["instrument", "analysis"], effect: "read", returns: "verification" },
       { name: "performanceStop", label: "Stop FPS meter", category: "QoL", doc: "Detach the owned EGL listener", capabilities: ["instrument"], effect: "control", returns: "verification", statusAction: "performanceStatus" },

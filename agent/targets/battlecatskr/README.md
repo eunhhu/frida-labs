@@ -18,7 +18,7 @@ The app must already be running. Bundle-id attach is supported even when Frida
 shows the localized process name `냥코 대전쟁`. Override the saved device with
 `--device usb`, another exact id, or `--host host:port`.
 
-Safe REPL calls available before the data download:
+Safe advanced-console calls available before the data download:
 
 ```js
 await modInfo()

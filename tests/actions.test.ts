@@ -70,6 +70,12 @@ test("descriptor normalization is additive for legacy metadata and fail-closed f
     { name: "legacyUnknown", args: [{ name: "options", type: "object" }] },
     explicit("status", { label: "Live status", category: "System", capabilities: ["analysis", "instrument"], effect: "read" }),
     explicit("install", { capabilities: ["instrument", "debug"], effect: "hook", returns: "verification", statusAction: "status" }),
+    explicit("controls", { args: [
+      { name: "enabled", type: "boolean", ui: { control: "checkbox", label: "Enabled" } },
+      { name: "speed", type: "number", ui: { control: "slider", min: 0.25, max: 3, step: 0.25, default: 1 } },
+      { name: "profile", type: "string", ui: { control: "select", options: [{ label: "Safe", value: "safe" }, { label: "Fast", value: "fast" }] } },
+    ] }),
+    explicit("badUi", { args: [{ name: "enabled", type: "boolean", ui: { control: "slider", min: 0, max: 1, step: 1 } }] }),
     explicit("badStatus", { statusAction: "missing" }),
     explicit("partial", { returns: undefined }),
     explicit("badCapability", { capabilities: ["instrument", "root"] }),
@@ -89,6 +95,7 @@ test("descriptor normalization is additive for legacy metadata and fail-closed f
     "legacyUnknown",
     "status",
     "install",
+    "controls",
   ]);
   expect(normalized.descriptors[0]).toMatchObject({
     capabilities: ["instrument"],
@@ -105,6 +112,11 @@ test("descriptor normalization is additive for legacy metadata and fail-closed f
     label: "Live status",
     category: "System",
   });
+  expect(normalized.descriptors.find((descriptor) => descriptor.name === "controls")?.args).toMatchObject([
+    { ui: { control: "checkbox", label: "Enabled" } },
+    { ui: { control: "slider", min: 0.25, max: 3, step: 0.25, default: 1 } },
+    { ui: { control: "select", default: "safe", options: [{ label: "Safe", value: "safe" }, { label: "Fast", value: "fast" }] } },
+  ]);
   expect(normalized.warnings.length).toBeGreaterThanOrEqual(8);
   expect(normalized.warnings.join("\n")).toContain("unknown type");
   expect(normalized.warnings.join("\n")).toContain("Duplicate descriptor");
@@ -248,7 +260,7 @@ test("strict coercion, arity, mode policies, canonical call name, and status lin
 test("pure authorization and coercion helpers deny unsafe modes and strict invalid values", () => {
   const descriptor: CanonicalRpcDescriptor = {
     name: "write",
-    args: [{ name: "n", type: "integer", optional: false }],
+    args: [{ name: "n", type: "integer", optional: false, ui: { control: "input" } }],
     capabilities: ["instrument", "debug", "analysis"],
     effect: "write",
     returns: "scalar",
@@ -678,7 +690,7 @@ test("all target and scaffold descriptors match the approved capability/effect i
     ...entries("probe", ["instrument", "debug"], "hook", "verification", ["demoStalker", "demoMam", "demoHookVerified", "demoReplace"]),
     ...entries("probe", ["debug"], "control", "json", ["demoExcrashInstall"]),
     ...entries("adofai", ["instrument", "analysis"], "read", "json", ["modInfo", "modState", "info", "classes"]),
-    ...entries("adofai", ["instrument", "analysis"], "read", "table", ["modHelp", "assemblies", "methods", "fields"]),
+    ...entries("adofai", ["instrument", "analysis"], "read", "table", ["assemblies", "methods", "fields"]),
     ...entries("adofai", ["instrument", "analysis"], "read", "scalar", ["address"]),
     ...entries("adofai", ["instrument", "analysis"], "read", "json", ["assistRead"]),
     { source: "adofai", name: "assistApply", capabilities: ["instrument"], effect: "write", returns: "verification", statusAction: "assistRead" },
@@ -689,21 +701,19 @@ test("all target and scaffold descriptors match the approved capability/effect i
     { source: "adofai", name: "dispose", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
     ...recordingEntries("adofai"),
     ...entries("terraria", ["instrument", "analysis"], "read", "json", ["modInfo", "modState", "playerSnapshot"]),
-    ...entries("terraria", ["instrument", "analysis"], "read", "table", ["modHelp"]),
     ...entries("terraria", ["instrument"], "control", "scalar", ["cmd"]),
     { source: "terraria", name: "set", capabilities: ["instrument"], effect: "control", returns: "scalar", statusAction: "modState" },
     { source: "terraria", name: "resetAll", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
     { source: "terraria", name: "dispose", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
     ...recordingEntries("terraria"),
     ...entries("piu", ["instrument", "analysis"], "read", "json", ["modInfo", "modState", "judgmentStats"]),
-    ...entries("piu", ["instrument", "analysis"], "read", "table", ["modHelp"]),
     { source: "piu", name: "toggle", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
     { source: "piu", name: "resetAll", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
     { source: "piu", name: "dispose", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
     ...recordingEntries("piu"),
     ...entries("meccha", ["instrument", "analysis"], "read", "json", ["modInfo", "modState", "info", "espStatus", "moveRead", "moveStatus"]),
     ...entries("meccha", ["analysis"], "read", "json", ["moveProbe"]),
-    ...entries("meccha", ["instrument", "analysis"], "read", "table", ["modHelp", "classes", "espSnapshot"]),
+    ...entries("meccha", ["instrument", "analysis"], "read", "table", ["classes", "espSnapshot"]),
     { source: "meccha", name: "espInstall", capabilities: ["instrument", "debug"], effect: "hook", returns: "scalar", statusAction: "espStatus" },
     { source: "meccha", name: "espRemove", capabilities: ["instrument", "debug"], effect: "control", returns: "scalar", statusAction: "espStatus" },
     { source: "meccha", name: "espTest", capabilities: ["instrument", "debug"], effect: "control", returns: "scalar", statusAction: "espStatus" },
@@ -731,5 +741,5 @@ test("all target and scaffold descriptors match the approved capability/effect i
 
   expect(descriptorSources.probe).toContain('{ name: "pattern", type: "pattern" }');
   expect(descriptorSources.probe).toContain('{ name: "addr", type: "address" }');
-  expect(descriptorSources.meccha).toContain('{ name: "opts", type: "json" }');
+  expect(descriptorSources.meccha).toContain('{ name: "opts", type: "json", ui: { control: "input"');
 });

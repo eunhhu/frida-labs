@@ -26,7 +26,7 @@ import {
   resolveDevice,
   type DeviceSelector,
 } from "./devices.js";
-import { ActionService } from "./actions.js";
+import { ActionService, descriptorHelpRows } from "./actions.js";
 import {
   MACHINE_PROTOCOL,
   handleMachineRequest,
@@ -155,9 +155,37 @@ export function completeHumanRepl(line: string, rpcNames: readonly string[]): [s
     ...rpcNames.map((name) => `await ${name}(`),
     ".exit",
     ".quit",
+    ".help",
+    "/help",
+    ":help",
+    ".exports",
+    "/exports",
+    ":exports",
   ])];
   const matches = candidates.filter((candidate) => candidate.startsWith(line));
   return [matches.length ? matches : candidates, line];
+}
+
+export function humanReplHelp(descriptors: readonly RpcDescriptor[]): string {
+  return [
+    "Instrument console commands",
+    "  .help | /help | :help       generated action and control help",
+    "  .exports | /exports         stable RPC action names",
+    "  .exit | .quit               detach and close",
+    "  Tab                         complete commands and RPC calls",
+    "",
+    "For checkboxes, sliders, selects, input fields, and live state:",
+    "  flab tui <target>",
+    "",
+    ...descriptorHelpRows(descriptors),
+  ].join("\n");
+}
+
+function humanReplMeta(source: string): "help" | "exports" | "exit" | null {
+  if (/^[.:/]help$/.test(source)) return "help";
+  if (/^[.:/]exports$/.test(source)) return "exports";
+  if (/^\.(?:exit|quit)$/.test(source) || /^\/(?:exit|quit)$/.test(source)) return "exit";
+  return null;
 }
 
 
@@ -175,7 +203,7 @@ async function startHumanSession(options: SessionOptions, label: string, ctx: Cm
   });
   const descriptors = await session.describe();
   const rpcNames = descriptors.map((item) => item.name);
-  ctx.out(`REPL ready — rpc exports: ${rpcNames.join(", ") || "(none)"} · .exit to quit`);
+  ctx.out(`Instrument console ready — .help or /help · .exit to quit · flab tui ${label} for controls`);
   if (detachedReason !== null) {
     await session.close();
     return 0;
@@ -189,12 +217,17 @@ async function startHumanSession(options: SessionOptions, label: string, ctx: Cm
   rl.prompt();
   rl.on("line", async (line) => {
     const source = line.trim();
-    if (source === ".exit" || source === ".quit") return void rl.close();
+    const meta = humanReplMeta(source);
+    if (meta === "exit") return void rl.close();
+    if (meta === "help") ctx.out(humanReplHelp(descriptors));
+    else if (meta === "exports") ctx.out(rpcNames.join("\n") || "(no described actions)");
     if (source) {
-      try {
-        const result = await session.eval(source);
-        if (result !== undefined) ctx.out(inspect(result, { colors: true, depth: 6 }));
-      } catch (error) { ctx.err((error as Error).message); }
+      if (meta === null) {
+        try {
+          const result = await session.eval(source);
+          if (result !== undefined) ctx.out(inspect(result, { colors: true, depth: 6 }));
+        } catch (error) { ctx.err((error as Error).message); }
+      }
     }
     rl.prompt();
   });
@@ -630,7 +663,7 @@ export const commands: Command[] = [
   {
     name: "run",
     usage: "flab run <target> [--device DEVICE | --host HOST] [--proc P] [--spawn] [--eval \"code\" | --session --json] [--no-watch]",
-    summary: "Compile, attach, inject, then REPL or run a one-shot evaluation.",
+    summary: "Compile, attach, inject, then open the advanced console or run a one-shot evaluation.",
     allowedFlags: ["json", "proc", "spawn", "eval", "no-watch", "session", ...DEVICE_FLAGS],
     detail: "One-shot JSON mode: flab run <target> --no-watch --eval 'await ping()' --json",
     async run(args, flags, ctx) {

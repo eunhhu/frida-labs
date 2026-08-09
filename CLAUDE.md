@@ -7,7 +7,7 @@ everything below works the same on Windows and Unix.
 
 ```sh
 bun install
-flab run <target> [--spawn]      # compile + attach + REPL (hot reload)
+flab run <target> [--spawn]      # compile + attach + advanced console (hot reload; .help or /help)
 flab tui [target]                # three-mode Connect/Analyze/Instrument TUI
 flab processes                   # discover processes and target matches
 flab devices                     # enumerate local/USB/remote Frida devices
@@ -35,9 +35,11 @@ bun run typecheck
 for machine consumption.
 
 The TUI keeps one Workbench/Store across exactly three modes: Connect, Analyze,
-and Instrument. Every visible selectable list is capped at three rows. Analyze
-contains read-only Actions, Explorer, and Record surfaces; Instrument contains
-Actions, REPL, and Observe. Mode and surface switches never reattach. Record
+and Instrument. Every visible selectable list or form is capped at three rows.
+Analyze contains read-only Actions, Explorer, and Record surfaces; Instrument
+contains descriptor-driven Controls, an advanced Console, and Events. Controls
+render inputs, checkboxes, sliders, selects, and linked live state from the same
+schema used by agents. Mode and surface switches never reattach. Record
 offers exactly Plan, Record, and Stop + summarize, then persists bounded
 evidence under `artifacts/records/`. Generic probe, every saved target, and the
 target scaffold expose the shared `agent/lib/recording.ts` RPC/descriptors.
@@ -101,9 +103,11 @@ not document individual games in repo-level docs.
   `agent/lib/<engine>/` from the start — target-local helper modules are
   rejected by `flab depcheck`.
 - No TODO stubs, dead code, or commented-out experiments in merged targets.
-- New game-specific surfaces provide concise `label` and `category` descriptor
-  metadata. Instrument renders these as its action menu while stable RPC names stay
-  shared by REPL and NDJSON callers.
+- New game-specific surfaces provide concise `label`, `category`, and argument
+  `ui` descriptor metadata. Instrument renders input/checkbox/slider/select
+  controls plus linked state while stable RPC names stay shared by the console
+  and NDJSON callers. flab generates `.help`/`/help` from descriptors; targets
+  do not implement `modHelp()`.
 - TUI modules import the `src/core/index.ts` barrel only. They never import
   `frida`, `agent/lib`, or target modules directly; authorization and launch
   validation remain core responsibilities.
@@ -116,7 +120,7 @@ not document individual games in repo-level docs.
 For new games, Instruments, QoL/content work, or end-to-end attach/spawn
 analysis, read `docs/agent-game-mod-guide.md` and invoke the `build-game-mod`
 project skill. It requires evidence-based subsystem coverage, a descriptor-led
-TUI Instrument, the same REPL/NDJSON action surface, cleanup, and a clean reattach.
+TUI Instrument, the same advanced-console/NDJSON action surface, cleanup, and a clean reattach.
 The completion contract includes objective/win-loss and economy/reward semantic
 mapping plus applicable default-off aim assist, ESP/awareness, reversible
 movement, accessibility, and training features for authorized owned-offline or

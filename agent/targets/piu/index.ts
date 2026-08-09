@@ -137,13 +137,6 @@ rpc.exports = {
       feature: "bounded probabilistic local judgment correction",
     };
   },
-  modHelp() {
-    return [
-      "1. modState() confirms correction is disabled by default",
-      "2. toggle(true, true) only in an owned offline play session",
-      "3. toggle(false) or resetAll() removes the IL2CPP implementation",
-    ];
-  },
   modState() { return state(); },
   judgmentStats() { return stats(); },
   async toggle(on: boolean, offlineConfirmed?: boolean) { return setEnabled(!!on, offlineConfirmed); },
@@ -152,10 +145,9 @@ rpc.exports = {
   __describe(): unknown {
     return [
       { name: "modInfo", label: "About this Instrument", category: "Start here", doc: "Runtime, feature, and offline safety boundary", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "modHelp", label: "Show the quick guide", category: "Start here", doc: "Explicit enable, disable, and cleanup flow", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
       { name: "modState", label: "Show correction status", category: "Start here", doc: "Hook ownership, method identity, and clean state", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
       { name: "judgmentStats", label: "Read judgment activity", category: "Training", doc: "Bounded call counts, original/corrected distributions, and latest invocation", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "toggle", label: "Toggle judgment correction", category: "Training", args: [{ name: "on", type: "boolean" }, { name: "offlineConfirmed", type: "boolean?" }], doc: "Enabling requires offlineConfirmed=true; disabling removes the implementation", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
+      { name: "toggle", label: "Toggle judgment correction", category: "Training", args: [{ name: "on", type: "boolean", ui: { control: "checkbox", label: "Judgment correction" } }, { name: "offlineConfirmed", type: "boolean?", ui: { control: "checkbox", label: "Owned offline session" } }], doc: "Enabling requires offlineConfirmed=true; disabling removes the implementation", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
       { name: "resetAll", label: "Disable and restore", category: "Start here", doc: "Remove the owned IL2CPP implementation", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
       { name: "dispose", label: "Dispose owned handles", category: "Start here", doc: "Automatic detach cleanup", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
       ...recordingDescriptors(),

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Box, Text, useInput, useWindowSize } from "ink";
 import {
   authorizeAction,
+  coerceActionArgs,
   normalizeRpcDescriptors,
   type ActionMode,
   type ActionReceipt,
@@ -9,6 +10,16 @@ import {
 } from "../core/index.js";
 import type { SessionState } from "./store.js";
 import { workbench } from "./workbench.js";
+import {
+  adjustInstrumentField,
+  createInstrumentForm,
+  instrumentFieldLabel,
+  instrumentFieldValue,
+  instrumentFormRawArgs,
+  replaceInstrumentField,
+  resetInstrumentField,
+  type InstrumentFormField,
+} from "./instrument-form.js";
 
 /** UX invariant: never render more than three selectable actions at once. */
 export const ACTION_VIEW = 3;
@@ -56,7 +67,7 @@ const CATEGORY_ORDER = [
 
 const CATEGORY_HINTS: Array<[RegExp, string]> = [
   [/^instrument/i, "Managed"],
-  [/^(modInfo|modState|modHelp)/i, "Start here"],
+  [/^(modInfo|modState)/i, "Start here"],
   [/^(objective|victory|defeat|complete|stage|wave|progress)/i, "Objectives"],
   [/^(economy|currency|wallet|gold|gem|score|reward)/i, "Economy"],
   [/^(aim|assist|target)/i, "Assist"],
@@ -116,8 +127,8 @@ export interface ActionPaletteProps extends ActionPanelProps {
 interface CaptureState {
   descriptor: CanonicalRpcDescriptor;
   index: number;
-  rawArgs: string[];
-  input: string;
+  fields: InstrumentFormField[];
+  error?: string;
 }
 interface PageCursor {
   descriptor: CanonicalRpcDescriptor;
@@ -140,19 +151,7 @@ function effectLabel(descriptor: CanonicalRpcDescriptor): string {
 
 function inputLabel(descriptor: CanonicalRpcDescriptor): string {
   if (descriptor.args.length === 0) return "No input required";
-  return `Input: ${descriptor.args.map((arg) => `${arg.name}${arg.optional ? " (optional)" : ""}`).join(", ")}`;
-}
-
-function argumentHint(type: CanonicalRpcDescriptor["args"][number]["type"]): string {
-  switch (type) {
-    case "boolean": return "type exactly true or false";
-    case "number": return "type a finite number";
-    case "integer": return "type a whole number";
-    case "json": return "type valid JSON";
-    case "address": return "use a 0x-prefixed address";
-    case "pattern": return "use Frida bytes, e.g. 48 8b ?? ??";
-    default: return "type text";
-  }
+  return `Controls: ${descriptor.args.map((arg) => `${arg.ui.control}${arg.optional ? "?" : ""}`).join(", ")}`;
 }
 
 function oneLine(value: string, limit = 240): string {
@@ -259,6 +258,9 @@ export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
   const [pageCursor, setPageCursor] = useState<PageCursor | null>(null);
   const [rowOffset, setRowOffset] = useState(0);
   const [showDetails, setShowDetails] = useState(false);
+  const [stateReceipt, setStateReceipt] = useState<ActionReceipt | null>(null);
+  const [stateBusy, setStateBusy] = useState(false);
+  const [stateError, setStateError] = useState<string | null>(null);
 
   const normalized = useMemo(
     () => normalizeRpcDescriptors(session.describe ?? []),
@@ -293,11 +295,12 @@ export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
   const receiptRows = Math.max(0, Math.min(compact ? 2 : MAX_RECEIPT_ROWS, props.receiptRows ?? 5));
   const maxRowOffset = Math.max(0, (latest?.result.rows.length ?? 0) - receiptRows);
   const visibleRowOffset = Math.min(rowOffset, maxRowOffset);
+  const stateView = stateReceipt ? jsonReceiptView(stateReceipt.result.summary) : null;
 
   useEffect(() => () => props.onCaptureChange(false), [props.onCaptureChange]);
 
   const beginCapture = (descriptor: CanonicalRpcDescriptor): void => {
-    setCapture({ descriptor, index: 0, rawArgs: [], input: "" });
+    setCapture({ descriptor, index: 0, fields: createInstrumentForm(descriptor) });
     props.onCaptureChange(true);
   };
 
@@ -305,6 +308,37 @@ export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
     setCapture(null);
     props.onCaptureChange(false);
   };
+
+  const stateDescriptorFor = (descriptor: CanonicalRpcDescriptor | null): CanonicalRpcDescriptor | null => {
+    const linked = descriptor?.statusAction
+      ? normalized.descriptors.find((candidate) => candidate.name === descriptor.statusAction) ?? null
+      : null;
+    if (linked && linked.args.every((arg) => arg.optional)) return linked;
+    if (descriptor && descriptor.effect === "read" && descriptor.args.every((arg) => arg.optional) &&
+        descriptor.capabilities.includes("analysis")) return descriptor;
+    return normalized.descriptors.find((candidate) =>
+      candidate.name === "modState" && candidate.effect === "read" &&
+      candidate.capabilities.includes("analysis") && candidate.args.every((arg) => arg.optional)) ?? null;
+  };
+
+  const refreshState = (descriptor: CanonicalRpcDescriptor | null): void => {
+    const stateDescriptor = stateDescriptorFor(descriptor);
+    if (!stateDescriptor || stateBusy) return;
+    setStateBusy(true);
+    setStateError(null);
+    void workbench.invokeAction(session.id, "analysis", stateDescriptor.name, [])
+      .then((receipt) => setStateReceipt(receipt))
+      .catch((error: unknown) => setStateError(error instanceof Error ? error.message : String(error)))
+      .finally(() => setStateBusy(false));
+  };
+
+  useEffect(() => {
+    if (mode !== "instrument" || stateReceipt !== null || session.describe === null) return;
+    const initial = normalized.descriptors.find((descriptor) => descriptor.name === "modState") ?? null;
+    if (initial) refreshState(initial);
+    // Load one initial state snapshot per mounted live Instrument panel.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, session.describe, stateReceipt]);
 
   const invoke = (
     descriptor: CanonicalRpcDescriptor,
@@ -320,6 +354,7 @@ export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
           setRowOffset(0);
           setPageCursor(cursor ?? { descriptor, rawArgs: [...rawArgs], offsets: [offset], index: 0 });
         }
+        if (mode === "instrument" && receipt.status === "passed") refreshState(descriptor);
       })
       .catch((error: unknown) => {
         setInvokeError(error instanceof Error ? error.message : String(error));
@@ -348,29 +383,50 @@ export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
         endCapture();
         return;
       }
+      const field = capture.fields[capture.index]!;
       if (key.return) {
-        const arg = capture.descriptor.args[capture.index]!;
-        if (arg.optional && capture.input.length === 0) {
-          const { descriptor, rawArgs } = capture;
-          endCapture();
-          invoke(descriptor, rawArgs);
+        const { descriptor, fields } = capture;
+        const rawArgs = instrumentFormRawArgs(fields);
+        const validation = coerceActionArgs(descriptor, rawArgs);
+        if (!validation.ok) {
+          setCapture({ ...capture, error: validation.message });
           return;
         }
-        const rawArgs = [...capture.rawArgs, capture.input];
-        if (capture.index + 1 === capture.descriptor.args.length) {
-          const { descriptor } = capture;
-          endCapture();
-          invoke(descriptor, rawArgs);
-        } else {
-          setCapture({ ...capture, index: capture.index + 1, rawArgs, input: "" });
-        }
+        endCapture();
+        invoke(descriptor, rawArgs);
+        return;
+      }
+      if (key.upArrow) {
+        setCapture({ ...capture, index: Math.max(0, capture.index - 1) });
+        return;
+      }
+      if (key.downArrow || key.tab) {
+        setCapture({ ...capture, index: Math.min(capture.fields.length - 1, capture.index + 1) });
+        return;
+      }
+      if (key.leftArrow || key.rightArrow) {
+        const fields = capture.fields.slice();
+        fields[capture.index] = adjustInstrumentField(field, key.leftArrow ? -1 : 1);
+        setCapture({ ...capture, fields, error: undefined });
         return;
       }
       if (key.backspace || key.delete) {
-        setCapture({ ...capture, input: capture.input.slice(0, -1) });
+        const fields = capture.fields.slice();
+        fields[capture.index] = field.arg.ui.control === "input"
+          ? replaceInstrumentField(field, field.raw.slice(0, -1))
+          : resetInstrumentField(field);
+        setCapture({ ...capture, fields, error: undefined });
         return;
       }
-      if (!key.ctrl && !key.meta && input) setCapture({ ...capture, input: capture.input + input });
+      if (!key.ctrl && !key.meta && input) {
+        const fields = capture.fields.slice();
+        if (field.arg.ui.control === "input") {
+          fields[capture.index] = replaceInstrumentField(field, field.raw + input);
+        } else if (input === " ") {
+          fields[capture.index] = adjustInstrumentField(field, 1);
+        }
+        setCapture({ ...capture, fields, error: undefined });
+      }
       return;
     }
     if (props.enablePaging && !key.ctrl && !key.meta && input === "k") {
@@ -393,6 +449,10 @@ export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
       setShowDetails((visible) => !visible);
       return;
     }
+    if (!key.ctrl && !key.meta && input === "s" && mode === "instrument") {
+      refreshState(selected);
+      return;
+    }
 
     if (key.upArrow) setCursor((current) => Math.max(0, current - 1));
     else if (key.downArrow) setCursor((current) => Math.min(Math.max(0, actions.length - 1), current + 1));
@@ -407,19 +467,24 @@ export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
     Math.min(selectedIndex - Math.floor(actionView / 2), Math.max(0, actions.length - actionView)),
   );
   const visible = actions.slice(windowStart, windowStart + actionView);
-  const captureArg = capture?.descriptor.args[capture.index];
+  const formStart = capture
+    ? Math.max(0, Math.min(capture.index - 1, Math.max(0, capture.fields.length - ACTION_VIEW)))
+    : 0;
+  const visibleFields = capture?.fields.slice(formStart, formStart + ACTION_VIEW) ?? [];
 
   return (
     <Box flexDirection="column" flexGrow={1} paddingX={1}>
       <Box flexDirection="column">
         <Text bold>{props.title}</Text>
         {mode === "instrument" && (
-          <Text dimColor>Game actions first · tracing and watches are under Managed</Text>
+          <Text dimColor>Choose a feature, edit its controls, then inspect live state below.</Text>
         )}
         <Text dimColor>
-          ↑/↓ choose · Enter {busy ? "running…" : "run"} · i details
+          {capture
+            ? "↑/↓ field · ←/→ adjust · type input · Enter apply · Esc cancel"
+            : `↑/↓ feature · Enter ${busy ? "running…" : "open/apply"} · s state · i details`}
         </Text>
-        {actions.length > 0 && (
+        {!capture && actions.length > 0 && (
           <Text dimColor>{actions.length} actions · {categorySummary} · selected {selectedIndex + 1}</Text>
         )}
       </Box>
@@ -429,7 +494,7 @@ export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
       {normalized.warnings.length > 0 && (
         <Text color="yellow">{normalized.warnings.length} invalid descriptor(s) hidden</Text>
       )}
-      {visible.map((descriptor, index) => {
+      {!capture && visible.map((descriptor, index) => {
         const absoluteIndex = windowStart + index;
         return (
           <Text key={descriptor.name} color={absoluteIndex === selectedIndex ? "cyan" : undefined}>
@@ -438,11 +503,11 @@ export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
           </Text>
         );
       })}
-      {windowStart + visible.length < actions.length && (
+      {!capture && windowStart + visible.length < actions.length && (
         <Text dimColor>  ↓ {actions.length - windowStart - visible.length} more actions</Text>
       )}
 
-      {selected && (
+      {!capture && selected && (
         <Box flexDirection="column" borderTop borderStyle="single" borderColor="gray">
           <Text><Text bold>{actionLabel(selected)}</Text><Text dimColor> · {actionCategory(selected)}</Text></Text>
           <Text>{selected.doc ? oneLine(selected.doc) : <Text dimColor>No description provided.</Text>}</Text>
@@ -458,20 +523,45 @@ export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
         </Box>
       )}
 
-      {capture && captureArg && (
+      {capture && (
         <Box flexDirection="column" borderStyle="round" borderColor="yellow" paddingX={1}>
-          <Text color="yellow">
-            {actionLabel(capture.descriptor)} · input {capture.index + 1}/{capture.descriptor.args.length}
-          </Text>
-          <Text>
-            {captureArg.name}: {captureArg.type}{captureArg.optional ? " (optional; empty ends capture)" : ""} &gt; {capture.input}
-          </Text>
-          <Text dimColor>{argumentHint(captureArg.type)} · Enter accepts · Esc cancels</Text>
+          <Text bold color="yellow">{actionLabel(capture.descriptor)}</Text>
+          {visibleFields.map((field, index) => {
+            const absoluteIndex = formStart + index;
+            const active = absoluteIndex === capture.index;
+            return (
+              <Text key={field.arg.name} color={active ? "cyan" : undefined}>
+                {active ? "❯ " : "  "}{instrumentFieldLabel(field)} {field.arg.optional ? <Text dimColor>(optional)</Text> : null}
+                {"  "}{instrumentFieldValue(field)}
+              </Text>
+            );
+          })}
+          {capture.error && <Text color="red">{oneLine(capture.error)}</Text>}
+          <Text dimColor>{capture.descriptor.doc ? oneLine(capture.descriptor.doc) : effectLabel(capture.descriptor)}</Text>
+        </Box>
+      )}
+
+      {mode === "instrument" && (
+        <Box flexDirection="column" borderTop borderStyle="single" borderColor="cyan">
+          <Text bold>Live state <Text dimColor>· s refresh</Text></Text>
+          {stateBusy && <Text color="yellow">Refreshing state…</Text>}
+          {!stateBusy && !stateReceipt && !stateError && <Text dimColor>No state action is linked for this feature.</Text>}
+          {stateError && <Text color="red">{oneLine(stateError)}</Text>}
+          {stateReceipt && !stateBusy && (
+            <>
+              <Text color={receiptColor(stateReceipt.status)}>
+                {stateReceipt.action} · {stateView?.headline ?? oneLine(stateReceipt.result.summary || "(empty)")}
+              </Text>
+              {stateView?.rows.slice(0, compact ? 2 : 4).map((row, index) => (
+                <Text key={`state-${index}`}>{oneLine(row, 180)}</Text>
+              ))}
+            </>
+          )}
         </Box>
       )}
 
       <Box flexDirection="column" borderTop borderStyle="single" borderColor="gray">
-        <Text bold>Last result</Text>
+        <Text bold>Last action result</Text>
         {!latest && <Text dimColor>No action has run yet.</Text>}
         {latest && (
           <>

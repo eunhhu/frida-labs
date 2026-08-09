@@ -181,6 +181,14 @@ Analysis remains read-only. Writes, controls, and hooks require an Instrument or
 Debug capability declared by the live descriptor. Results are bounded action
 receipts; cached or forged descriptors do not grant authority.
 
+Each argument may also carry vendor-neutral human UI metadata. `control` is one
+of `input`, `checkbox`, `slider`, or `select`; sliders include finite
+`min`/`max`/`step`, and selects include bounded typed `{label,value}` options.
+Agents should preserve this metadata when authoring source because the human TUI
+uses it for forms and linked `statusAction` state, but agents still call the
+stable action name with positional typed arguments. flab generates console help
+from this schema; targets do not need a `modHelp()` action.
+
 Create a distributable artifact after static and live verification:
 
 ```json
