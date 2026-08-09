@@ -1,12 +1,13 @@
-# AI harness guide: build a game-specific mod menu and REPL
+# AI harness guide: build a game-specific Instrument
 
 This is the shared execution contract for GJC, Codex, Claude Code, and
 OpenCode. Every harness must produce the same files, runtime evidence, and user
 experience.
 
 Use it only against a game, process, and device you own or are authorized to
-test, preferably offline or single-player. Do not bypass anti-cheat, interfere
-with online play, or affect another user's process or data.
+test. Work in owned-offline mode or a fully owned, consenting, isolated private
+lab where anti-cheat is absent or officially disabled. Do not bypass anti-cheat,
+enter public play, or affect another user's process, account, or data.
 
 ## If you are the game owner, start here
 
@@ -20,11 +21,11 @@ Device: <local, usb, remote, exact id, or host:port>
 Start mode: <attach or spawn>
 Wanted features: <objectives/win-loss, completion/progression, economy/rewards,
 combat, cooldowns, inventory, content, aim assist, ESP/awareness, movement
-trainer, accessibility, training, QoL, ...>
+assistance, accessibility, training, QoL, ...>
 ```
 
-Also state that this is your authorized offline/single-player instance and ask
-the agent to finish live verification and cleanup. The harness commands are
+Also provide the authorization profile from `docs/agent-control-api.md` and ask
+the agent to finish live verification, cleanup, and packaging. The commands are
 listed below. Everything after them is the completion contract the agent
 follows; it is reference material, not required reading for basic use.
 
@@ -33,29 +34,41 @@ follows; it is reference material, not required reading for basic use.
 A completed run is not just a Frida script. It produces:
 
 1. `agent/targets/<slug>/index.ts`, registered in `frida-labs.json`.
-2. A descriptor-driven game-specific mod menu in `flab tui <slug>`.
+2. A descriptor-driven game-specific Instrument in `flab tui <slug>`.
 3. A game-specific REPL in `flab run <slug>` with tab completion over the same
    actions.
-4. The same surface for AI controllers through
-   `flab run <slug> --session --json`.
+4. The complete authoring surface through ACP/MCP or `flab agent --json`, plus
+   the same selected live surface through `flab run <slug> --session --json`.
 5. `agent/targets/<slug>/README.md` with exact launch commands, feature catalog,
    coverage matrix, cleanup, and limitations.
 6. `artifacts/<slug>/semantic-model.json` mapping objectives, win/loss,
    rewards, local economy, persistence, entities, and assist/training surfaces.
 7. Local recon, controlled-experiment, and verification receipts under
    `artifacts/<slug>/`.
+8. A checksummed `dist/instruments/<slug>.flab.json` package.
+9. When Record was used, bounded metadata and JSONL events under
+   `artifacts/records/`, referenced by the semantic model or verification receipt.
 
 The menu, REPL, and AI protocol are three views of one `rpc.exports` surface.
 Do not implement separate feature sets for each frontend.
 
-## TUI versus an AI-controlled persistent CLI
+## Human TUI versus ACP/MCP agent control
 
-The TUI is for humans; an AI agent should not scrape terminal pixels or send
-arrow keys. The agent starts one `flab ... --session --json` child process,
-keeps its stdin/stdout open, and exchanges typed NDJSON requests until `close`.
-That single process retains the Frida attachment, live descriptors, action
-receipts, and managed instrument ids. Hot reload and reconnect stay inside the
-same host workflow instead of requiring a new shell command per action.
+The TUI is for humans; an AI agent must not scrape terminal pixels or send arrow
+keys. An ACP client starts `flab acp`; flab auto-detects a compatible upstream
+agent or accepts `--upstream`, then injects the flab MCP server into the ACP
+session. An MCP-native harness starts `flab mcp`. A minimal harness may keep
+`flab agent --json` open directly. All three paths send a concrete authorization
+profile and use the same `flab.control.v1` operations for discovery, Record,
+authoring, module linking, build, live actions, cleanup, and packaging. A
+selected live session retains the Frida attachment, descriptors, receipts, and
+managed Instrument ids.
+
+Record bridges the human/agent observation gap. The human starts one bounded
+capture, performs one named gameplay scenario, then stops it. The agent consumes
+the persisted timing, argument, return, duration, thread, and transition summary
+without scraping the screen or requiring a multimodal model. Record does not
+replace screenshots or human notes for visual-only meaning.
 
 Use one-shot CLI evaluation only when the coding harness cannot retain a PTY or
 child stdin. It is suitable for bounded recon, not for instrument lifecycle or
@@ -70,12 +83,12 @@ Build a verified game-specific mod for GAME={game title}, PROCESS={process name,
 bundle id, or positive PID}, DEVICE={local|usb|remote|device id|host:port},
 MODE={attach|spawn}. Desired priorities: {objectives/win-loss/completion/progression/
 economy/rewards/combat/cooldowns/inventory/entities/content/aim assist/ESP/
-movement trainer/accessibility/training/QoL features}. Use only my authorized
-offline or single-player instance.
+movement assistance/accessibility/training/QoL features}. Use only my authorized
+owned-offline instance or fully owned, consenting, isolated private lab.
 Follow docs/agent-game-mod-guide.md and the build-game-mod skill. Do not stop at
-recon or scaffolding: implement the descriptor-driven TUI menu, REPL, and AI
-session surface; exercise every shipped action against the live target; restore
-state on cleanup; write the per-target usage and coverage report. If a subsystem
+recon or scaffolding: implement the descriptor-driven Instrument and Agent API;
+exercise every shipped action against the live target; restore state on cleanup;
+package it; write the per-target usage and coverage report. If a subsystem
 cannot be reached safely, report the evidence and limitation instead of guessing.
 For continuous assists, require a discovered local engagement gate and explicit
 offline confirmation; keep them off by default and do not implement auto-fire.
@@ -94,23 +107,27 @@ If `flab` is not installed or the compiled binary is not on `PATH`, replace
 
 ### GJC
 
-This repository enables its project skill in `.gjc/config.yml`. Start an
-interactive run with an initial skill invocation:
+This repository enables its project skill in `.gjc/config.yml` and ships the
+same flab tools in `.mcp.json`. GJC currently requires the MCP file explicitly
+and requires its path to be absolute. Start an interactive run with:
 
 ```sh
-gjc '/skill:build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="objectives, economy, combat, aim assist, ESP, movement trainer, content"'
+gjc --mcp-config "$PWD/.mcp.json" '/skill:build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="objectives, economy, combat, aim assist, ESP, movement assistance, content"'
 ```
+
+In PowerShell, set `$mcp = (Resolve-Path .mcp.json).Path` and pass
+`--mcp-config $mcp`.
 
 Inside an existing GJC session, type:
 
 ```text
-/skill:build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="objectives, economy, combat, aim assist, ESP, movement trainer, content"
+/skill:build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="objectives, economy, combat, aim assist, ESP, movement assistance, content"
 ```
 
 For a one-shot/headless run:
 
 ```sh
-gjc -p '/skill:build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="objectives, economy, combat, aim assist, ESP, movement trainer, content"'
+gjc -p --mcp-config "$PWD/.mcp.json" '/skill:build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="objectives, economy, combat, aim assist, ESP, movement assistance, content"'
 ```
 
 Use `gjc --tmux '...'` when the outer coding-agent session must survive a
@@ -122,7 +139,7 @@ instrumentation session inside it.
 Codex discovers `.agents/skills/build-game-mod/SKILL.md`. Start interactively:
 
 ```sh
-codex '$build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="objectives, economy, combat, aim assist, ESP, movement trainer, content"'
+codex '$build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="objectives, economy, combat, aim assist, ESP, movement assistance, content"'
 ```
 
 Inside an existing task, mention `$build-game-mod` and the same parameters.
@@ -132,7 +149,7 @@ paste the complete request above.
 For non-interactive automation that may edit the workspace:
 
 ```sh
-codex exec --sandbox workspace-write '$build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="objectives, economy, combat, aim assist, ESP, movement trainer, content"'
+codex exec --sandbox workspace-write '$build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="objectives, economy, combat, aim assist, ESP, movement assistance, content"'
 ```
 
 `codex exec` defaults to a read-only sandbox. Live process attach may also be
@@ -146,14 +163,14 @@ Claude Code discovers `.claude/skills/build-game-mod/SKILL.md` and the root
 `CLAUDE.md`:
 
 ```sh
-claude '/build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="objectives, economy, combat, aim assist, ESP, movement trainer, content"'
+claude '/build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="objectives, economy, combat, aim assist, ESP, movement assistance, content"'
 ```
 
 Inside an existing session, type the same `/build-game-mod ...` command. A
 headless run is:
 
 ```sh
-claude -p '/build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="objectives, economy, combat, aim assist, ESP, movement trainer, content"'
+claude -p '/build-game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="objectives, economy, combat, aim assist, ESP, movement assistance, content"'
 ```
 
 Use an interactive run when attach commands require approval or the game must
@@ -172,13 +189,13 @@ opencode
 Then type:
 
 ```text
-/game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="objectives, economy, combat, aim assist, ESP, movement trainer, content"
+/game-mod GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="objectives, economy, combat, aim assist, ESP, movement assistance, content"
 ```
 
 For non-interactive use:
 
 ```sh
-opencode run 'Use the build-game-mod project skill. GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="objectives, economy, combat, aim assist, ESP, movement trainer, content". Complete live verification and the target-local guide.'
+opencode run 'Use the build-game-mod project skill. GAME=Terraria PROCESS=Terraria.exe DEVICE=local MODE=attach FEATURES="objectives, economy, combat, aim assist, ESP, movement assistance, content". Complete live verification, packaging, and the target-local guide.'
 ```
 
 Use the Build agent, not the read-only Plan agent, when implementation is
@@ -190,6 +207,8 @@ Never assume the target is local. Discover first:
 
 ```sh
 flab capabilities --json
+flab acp detect --json
+flab agent --json
 flab devices --json
 flab processes --device local --json
 flab processes --device usb --json
@@ -218,19 +237,25 @@ version in the target guide.
 
 ### Phase 1: preflight and select one live target
 
-1. Read `CLAUDE.md`, this guide, and `flab capabilities --json`.
+1. Read `CLAUDE.md`, this guide, `docs/agent-control-api.md`, and runtime
+   capabilities through ACP/MCP or `flab agent --json`.
 2. Run `bun install` only when dependencies are missing.
 3. Run `flab doctor` with the intended device selector.
 4. Run `flab devices --json`, then `flab processes ... --json` on the same
    selector.
 5. Resolve ambiguity by exact device id plus positive PID. Ask the user only if
    multiple plausible processes remain or authorization is unclear.
-6. Save the selected target identity under `artifacts/<slug>/preflight.json`.
+6. Prefer `flab acp` for an ACP harness, `flab mcp` for an MCP harness, or start
+   one direct `flab.control.v1` process. Send the concrete owned-offline or
+   private-lab authorization profile before device or mutation operations.
+7. Save the selected identity and authorization class, without secrets, under
+   `artifacts/<slug>/preflight.json`.
 
 ### Phase 2: persistent recon before implementation
 
-Start with the generic probe agent. Prefer a positive PID for an already
-running game:
+Prefer the global control process: use `device.list`, `process.list`, then
+`session.open` with a generic probe launch. The single-target compatibility
+transport below remains available. Prefer a positive PID for a running game:
 
 ```sh
 flab probe --pid <pid> --device <selector> --session --json
@@ -264,6 +289,25 @@ instrument ids exist only inside that session. Close it explicitly:
 If the coding harness cannot keep stdin open, use bounded one-shot probe calls
 for initial facts, then move to a harness terminal/PTY for lifecycle testing.
 Do not substitute the human TUI for a machine protocol parser.
+
+When a human can play one representative scenario, prefer Record over blind
+guessing. Through `flab.control.v1`:
+
+1. Call `record.plan` with a narrow symbol/function query and optional exact
+   module. Inspect the bounded candidates; do not hook every function.
+2. Call `record.start` with selected addresses, argument counts, a scenario
+   label, duration/event caps, and backtraces only when needed.
+3. Tell the human the single action to perform: one hit, pickup, shot, jump,
+   purchase, win, loss, or other isolated event.
+4. Poll `record.status`, then call `record.stop` before changing scenes.
+5. Read `record.summary` first. Use bounded `record.read` pages only for the
+   functions and transitions that need deeper inspection.
+6. Reference the returned Record id and artifact paths in the experiment or
+   semantic-model evidence. Report dropped or truncated events explicitly.
+
+Capture ends automatically at its duration/event/byte bounds, on detach, or
+during cleanup. Raw pointer-shaped arguments are evidence, not inferred types;
+correlate them with reflection, memory, symbols, and controlled counterexamples.
 
 The generic probe establishes identity, runtime, modules, strings, symbols,
 hooks, and state-diff candidates; it is not full semantic coverage. After the
@@ -336,7 +380,8 @@ hypothesis, run a controlled loop on the same device and scene:
 2. Trigger exactly one natural event, such as one kill, spend, pickup, wave end,
    victory, defeat, jump, aim movement, or visibility transition.
 3. Diff state, then narrow candidates with managed reflection, strings/symbols,
-   memory write watch plus backtrace, and function argument/return tracing.
+   memory write watch plus backtrace, and a bounded Record of function timing,
+   arguments, return values, and transitions.
 4. Trace both directions: cause → state transition → reward/save, and direct
    state/API change → HUD/gameplay/persistence effect.
 5. Repeat a positive case, negative/counterexample case, cleanup, and reattach.
@@ -353,7 +398,7 @@ stage or wave advancement, local score/resources, health/damage, skill or item
 cooldowns, inventory/equipment, spawns, game-specific content systems, and
 bounded accessibility/training assists that materially reduce execution burden.
 Frame-rate meters, keep-awake, and generic discovery are supporting tools, not
-a completed mod menu when callable gameplay functions or state were found.
+a completed Instrument when callable gameplay functions or state were found.
 Do not force the same feature list onto every title: map each requested outcome
 to that game's actual functions, fields, proxies, factories, or save schema.
 
@@ -368,7 +413,7 @@ Use existing engine libraries instead of rebuilding them in the target:
 
 - Unreal: `agent/lib/ue/`
 - Engine-neutral aim selection/smoothing: `agent/lib/assist.ts`
-- Configurable UE aim, ESP, and reversible movement trainers:
+- Configurable UE aim, ESP, and reversible movement Instrument modules:
   `agent/lib/ue/aim.ts`, `agent/lib/ue/esp.ts`, `agent/lib/ue/movement.ts`
 - Unity IL2CPP: `agent/lib/il2cpp.ts`
 - Unity Mono or FNA/Mono: `agent/lib/mono/`
@@ -379,7 +424,7 @@ Use existing engine libraries instead of rebuilding them in the target:
 
 Run `flab lib --json` for the current reusable API catalog.
 
-### Phase 4: scaffold and implement the game target
+### Phase 4: scaffold and implement the game Instrument
 
 Create only after recon establishes the process and engine:
 
@@ -387,6 +432,11 @@ Create only after recon establishes the process and engine:
 flab new <slug> "<process-or-bundle>" --device <selector> --json
 flab target set <slug> --proc "<corrected-process>" --json
 ```
+
+Agents normally use `instrument.create`, `instrument.source.read`,
+`module.list`, `module.link`, and compare-and-swap `instrument.source.write`
+through ACP/MCP-backed `flab.control.v1`. CLI commands remain human adapters
+over the same project and source services.
 
 Use `--host` instead of `--device` for an explicit endpoint. Keep game-specific
 glue in `agent/targets/<slug>/index.ts`; reusable runtime logic belongs in
@@ -467,7 +517,7 @@ Implementation invariants:
   team/hostility and alive state truthfully, and report visibility as `unknown`
   unless a line-of-sight path was verified. Overlay removal must detach its
   render hook and timer.
-- Movement trainers must capture the live original component values before the
+- Movement assistance must capture the live original component values before the
   first write, survive respawn by re-resolving components, bound every profile,
   and restore captured values rather than assumed engine defaults.
 - Economy controls must identify local versus remote authority and preserve
@@ -488,7 +538,7 @@ pipeline. If arbitrary assets require external packaging or a restart,
 document that second stage and ship only the runtime-verified portion. Never
 relabel a value edit as new content.
 
-### Phase 5: verify the three interfaces
+### Phase 5: verify the human, Agent, and artifact interfaces
 
 Static gates:
 
@@ -520,7 +570,7 @@ Verify domain semantics, not only RPC success:
   smoothing, engagement-gate release, disable, and clean reattach;
 - ESP/awareness: self exclusion, entity cap, team/hostility labels, honest
   visibility state, overlay removal, and no duplicate render hook;
-- movement trainer: apply/readback, respawn or component change when reachable,
+- movement assistance: apply/readback, respawn or component change when reachable,
   enforcement disable, exact original restoration, and clean reattach.
 
 Live TUI menu:
@@ -538,10 +588,27 @@ Confirm:
 3. Analysis contains read-only actions only.
 4. REPL tab completion includes every action.
 5. Mode switches do not detach the session.
-6. Debug shows real hook receipts, detach, exception, or crash evidence without
-   mislabeling events.
+6. Record exposes only Plan, Record, and Stop + summarize; one bounded scenario
+   persists truthful event counts, dropped counts, summary, and artifact paths.
 
-Live AI session:
+Live ACP/MCP and Agent Control API:
+
+```sh
+flab acp detect --json
+flab mcp
+flab agent --json
+```
+
+When an ACP upstream is installed, verify its `initialize` and session setup
+preserve upstream fields while adding exactly one flab MCP server. Verify the
+MCP server lists only the generic `flab_control` and `flab_events` tools plus
+its capabilities resource and build prompt. Authorize first, then exercise
+`instrument.source.read`, `module.list`, Record, build, `verify.static`,
+`session.open`, `session.describe`, every shipped `session.action`,
+`session.close`, and `instrument.package`. Verify the resolved device and PID
+from responses rather than assuming the request succeeded.
+
+Selected-session compatibility protocol:
 
 ```sh
 flab run <slug> --device <selector> --session --json
@@ -563,6 +630,23 @@ For managed trace/watch/freeze, test the complete lifecycle:
 
 Do not hard-code `ins-1`; consume the id returned by `instrumentStart`.
 
+Windows Steam compatibility sweep (owned offline installs only):
+
+```powershell
+$env:FLAB_STEAM_E2E_AUTHORIZATION = "owned-offline"
+bun run test:steam-e2e
+```
+
+Run it in the logged-in interactive Windows desktop session; an SSH service
+session cannot inject into desktop games. The harness discovers installed Steam
+manifests, launches one game at a time, protects pre-existing processes, skips
+public/anti-cheat titles, checks the generic probe and registered target
+contracts, cleans up, reattaches, and writes
+`artifacts/windows-steam-qa/report.json`. Use
+`FLAB_STEAM_E2E_INCLUDE=appid,appid` for a bounded retry. This is a main-menu
+compatibility sweep, not proof of gameplay semantics; feature completion still
+requires the scenario matrix above.
+
 ### Phase 6: cleanup, reattach, and report
 
 1. Call the target's reset/dispose action and `instrumentStopAll` when exposed.
@@ -576,6 +660,8 @@ Do not hard-code `ins-1`; consume the id returned by `instrumentStart`.
    USB/exact-device, and remote endpoint use; feature examples; the coverage
    and semantic matrices; assist activation and safety behavior; cleanup;
    tested build/device; and limitations.
+8. Run `flab package <slug> --json` and record the package path, SHA-256, and
+   internal integrity digest.
 
 ## Definition of done
 
@@ -589,9 +675,16 @@ Do not hard-code `ins-1`; consume the id returned by `instrumentStart`.
 - [ ] Applicable aim assist, ESP/awareness, movement, accessibility, and training
       candidates are shipped and live-verified or explicitly marked unsupported.
 - [ ] Every callable has truthful descriptor metadata.
-- [ ] TUI presents a readable game-specific menu.
+- [ ] TUI presents Connect → Analyze → Instrument, with no more than three
+      visible selectable options or actions at a time.
+- [ ] Analyze → Record exposes Plan, Record, and Stop + summarize; any captured
+      scenario is bounded, persisted, summarized, and cited as evidence.
 - [ ] REPL discovery and calls work.
 - [ ] Persistent NDJSON control works on the same device.
+- [ ] ACP discovery/gateway and direct MCP expose the same generic control and
+      cursor-event boundary without TUI scraping or vendor-specific operations.
+- [ ] Global Agent API can read/write source with optimistic hashes, link a
+      reusable module, build, verify, clean up, and package the Instrument.
 - [ ] Every mutation has a tested reset/disable path.
 - [ ] Continuous assists are default-off, engagement-gated, bounded, explicitly
       offline-confirmed, cleanly removable, and contain no auto-fire.

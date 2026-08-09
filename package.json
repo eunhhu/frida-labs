@@ -1,7 +1,7 @@
 {
   "name": "flab",
   "version": "1.0.0",
-  "description": "Cross-game Frida workspace tool — single CLI/TUI for building, injecting, and driving game agents",
+  "description": "Cross-game Frida workspace for building reusable Instruments with human and Agent interfaces",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,15 +10,19 @@
     "depcheck": "bun src/bin.ts depcheck",
     "test": "bun test",
     "test:runtime": "bun tests/runtime-attach.ts",
+    "test:steam-e2e": "bun tests/windows-steam-e2e.ts",
+    "test:game-feature-e2e": "bun tests/windows-game-feature-e2e.ts",
     "typecheck": "tsc -p tsconfig.json && tsc -p src/tsconfig.json",
     "build-bin": "bun build --compile src/launcher.ts --outfile flab"
   },
   "dependencies": {
+    "@modelcontextprotocol/server": "^2.0.0",
     "frida": "^17.16.4",
     "frida-java-bridge": "^7.0.13",
     "frida-objc-bridge": "^8.0.6",
     "ink": "^7.1.1",
-    "react": "^19.2.8"
+    "react": "^19.2.8",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/frida-gum": "^19.10.0",

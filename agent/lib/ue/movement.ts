@@ -1,4 +1,4 @@
-// Generic, reversible UCharacterMovementComponent trainer for authorized
+// Generic, reversible UCharacterMovementComponent Instrument for authorized
 // offline/single-player games. Values are captured from each live component
 // before the first write; reset() restores those exact values instead of
 // assuming UE defaults. Components are re-resolved across respawns.
@@ -97,7 +97,7 @@ function writeField(component: NativePointer, key: MovementKey, value: number): 
   try { address.writeFloat(value); return true; } catch { return false; }
 }
 
-export class MovementTrainer {
+export class MovementInstrument {
   private readonly wanted: Partial<Record<MovementKey, number>> = {};
   private readonly captures = new Map<string, Capture>();
   private enforceTimer: ReturnType<typeof setInterval> | null = null;
@@ -262,8 +262,14 @@ export class MovementTrainer {
   }
 }
 
-/** Create an isolated trainer when a target needs separate ownership. */
-export function createMovementTrainer(): MovementTrainer { return new MovementTrainer(); }
+/** Create an isolated movement Instrument when a target needs separate ownership. */
+export function createMovementInstrument(): MovementInstrument { return new MovementInstrument(); }
+
+/** @deprecated Compatibility alias; new code uses MovementInstrument. */
+export { MovementInstrument as MovementTrainer };
+
+/** @deprecated Compatibility factory; new code uses createMovementInstrument(). */
+export function createMovementTrainer(): MovementInstrument { return createMovementInstrument(); }
 
 /** Backward-compatible singleton; targets should still call reset()/dispose(). */
-export const movement = new MovementTrainer();
+export const movement = new MovementInstrument();

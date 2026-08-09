@@ -161,7 +161,7 @@ export function Repl(props: { session: SessionState; focused: boolean }): React.
     <Box flexDirection="column" flexGrow={1} paddingX={1}>
       <Box flexDirection="column">
         <Text bold>repl</Text>
-        <Text dimColor>:help · tab complete · ↑/↓ history · \ multiline · pgup/pgdn result</Text>
+        <Text dimColor>:help · Tab complete · Enter run</Text>
       </Box>
       <Box flexDirection="column" flexGrow={1}>
         {session.lastResult === null && <Text dimColor>eval runs with rpc.exports in scope — e.g. await ping()</Text>}

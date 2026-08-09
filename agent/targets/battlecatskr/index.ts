@@ -6,6 +6,7 @@ import { ActivityWindowController } from "../../lib/android-activity.js";
 import { FrameMeter } from "../../lib/frame-meter.js";
 import { withVerification, type Verification, type VerificationStatus } from "../../lib/hook.js";
 import { ok } from "../../lib/log.js";
+import { recordingDescriptors, recordingRpcSurface } from "../../lib/recording.js";
 
 const ACTIVITY = "jp.co.ponos.battlecats.MyActivity";
 const TOUCH_EXPORT = "Java_jp_co_ponos_battlecats_MyActivity_appTouch";
@@ -89,6 +90,7 @@ async function resetAll(): Promise<unknown> {
 }
 
 const surface = {
+  ...recordingRpcSurface(),
   modInfo(): unknown {
     return {
       game: "The Battle Cats KR",
@@ -150,6 +152,7 @@ const surface = {
       { name: "touchMonitorStop", label: "Stop touch monitor", category: "Debug", doc: "Detach the owned touch listener", capabilities: ["instrument", "debug"], effect: "control", returns: "verification", statusAction: "touchMonitorStatus" },
       { name: "resetAll", label: "Reset every reversible change", category: "Start here", doc: "Detach listeners and restore the Activity window flag", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
       { name: "dispose", label: "Dispose mod", category: "Debug", doc: "Cleanup alias used before reload or detach", capabilities: ["instrument", "debug"], effect: "control", returns: "json" },
+      ...recordingDescriptors(),
       { name: "__describe", doc: "This descriptor" },
     ];
   },

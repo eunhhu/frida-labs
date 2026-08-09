@@ -4,14 +4,19 @@
 
 import React, { useEffect, useState } from "react";
 import { Box, Text, useInput } from "ink";
-import type { RpcDescriptor } from "../core/index.js";
+import {
+  authorizeAction,
+  normalizeRpcDescriptors,
+  type CanonicalRpcDescriptor,
+} from "../core/index.js";
 import { workbench } from "./workbench.js";
 import { store, type SessionState } from "./store.js";
 
-const VIEW = 14;
+/** UX invariant: three selectable RPC entries maximum. */
+export const EXPLORER_VIEW = 3;
 const RESULT_LINES = 12;
 
-function signature(d: RpcDescriptor): string {
+function signature(d: CanonicalRpcDescriptor): string {
   const args = (d.args ?? []).map((a) => (a.type ? `${a.name}: ${a.type}` : a.name)).join(", ");
   return `${d.name}(${args})`;
 }
@@ -31,12 +36,12 @@ function parseRawArgs(line: string): string[] {
 export function Explorer(props: { session: SessionState; focused: boolean; onCaptureChange?(active: boolean): void }): React.JSX.Element {
   const { session } = props;
   const [cursor, setCursor] = useState(0);
-  const [argTarget, setArgTarget] = useState<RpcDescriptor | null>(null);
+  const [argTarget, setArgTarget] = useState<CanonicalRpcDescriptor | null>(null);
   const [argInput, setArgInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [resultOffset, setResultOffset] = useState(0);
 
-  const beginArgs = (descriptor: RpcDescriptor): void => {
+  const beginArgs = (descriptor: CanonicalRpcDescriptor): void => {
     setArgTarget(descriptor);
     props.onCaptureChange?.(true);
   };
@@ -46,13 +51,15 @@ export function Explorer(props: { session: SessionState; focused: boolean; onCap
     setArgInput("");
     props.onCaptureChange?.(false);
   };
-  const list = session.describe ?? [];
+  const normalized = normalizeRpcDescriptors(session.describe ?? []);
+  const list = normalized.descriptors.filter((descriptor) =>
+    authorizeAction(normalized.descriptors, "analysis", descriptor.name).ok);
   const clamped = Math.min(cursor, Math.max(0, list.length - 1));
 
-  const invoke = async (descriptor: RpcDescriptor, rawArgs: string[]): Promise<void> => {
+  const invoke = async (descriptor: CanonicalRpcDescriptor, rawArgs: string[]): Promise<void> => {
     setBusy(true);
     try {
-      const receipt = await workbench.invokeAction(session.id, "instrument", descriptor.name, rawArgs);
+      const receipt = await workbench.invokeAction(session.id, "analysis", descriptor.name, rawArgs);
       const page = receipt.result;
       const text = [
         page.summary,
@@ -62,7 +69,7 @@ export function Explorer(props: { session: SessionState; focused: boolean; onCap
         ...receipt.warnings.map((warning) => `warning: ${warning}`),
       ].join("\n");
       store.setResult(session.id, receipt.status === "passed", receipt.error?.message ?? text);
-      store.pushHistory(session.id, `instrument:${descriptor.name}(${rawArgs.map((arg) => JSON.stringify(arg)).join(", ")})`);
+      store.pushHistory(session.id, `analysis:${descriptor.name}(${rawArgs.map((arg) => JSON.stringify(arg)).join(", ")})`);
     } catch (error) {
       store.setResult(session.id, false, (error as Error).message);
     }
@@ -100,16 +107,16 @@ export function Explorer(props: { session: SessionState; focused: boolean; onCap
     }
   }, { isActive: props.focused });
 
-  const windowStart = Math.max(0, Math.min(clamped - (VIEW >> 1), Math.max(0, list.length - VIEW)));
-  const visible = list.slice(windowStart, windowStart + VIEW);
+  const windowStart = Math.max(0, Math.min(clamped - (EXPLORER_VIEW >> 1), Math.max(0, list.length - EXPLORER_VIEW)));
+  const visible = list.slice(windowStart, windowStart + EXPLORER_VIEW);
   const resultLines = (session.lastResult?.text ?? "").split("\n");
   const resultSlice = resultLines.slice(resultOffset, resultOffset + RESULT_LINES);
 
   return (
     <Box flexDirection="column" flexGrow={1} paddingX={1}>
       <Box flexDirection="column">
-        <Text bold>explorer · Instrument RPC surface</Text>
-        <Text dimColor>↑/↓ select · enter call · r refresh · pgup/pgdn result</Text>
+        <Text bold>analysis explorer · read-only RPC surface</Text>
+        <Text dimColor>↑/↓ select · Enter inspect · r refresh</Text>
       </Box>
       {session.describe === null && <Text dimColor>describe() not loaded yet (or target has no __describe)…</Text>}
       {session.describe !== null && list.length === 0 && <Text dimColor>no rpc exports reported</Text>}

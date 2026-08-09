@@ -1,6 +1,6 @@
-// Ink workspace: one persistent SessionWorkbench plus explicit Project,
-// Instrument, Debug, Probe, and Analysis modes. Runtime operations cross only
-// the core SessionEngine/ActionService/ProjectService boundary via Workbench.
+// Ink workspace: one persistent SessionWorkbench with three human modes:
+// Connect, Analyze, and Instrument. Advanced surfaces stay contextual instead
+// of becoming additional top-level modes.
 import React, { useCallback, useEffect, useSyncExternalStore } from "react";
 import { render, Box, Text, useInput, useApp, useWindowSize } from "ink";
 import {
@@ -23,9 +23,9 @@ import { Observe } from "./observe.js";
 import { ProjectPanel } from "./project.js";
 import type { ProjectCreateRequest } from "./project.js";
 import { InstrumentPanel } from "./instrument.js";
-import { DebugPanel } from "./debug.js";
-import { ProbePanel, TargetLaunchPanel } from "./probe.js";
+import { TargetLaunchPanel } from "./probe.js";
 import { AnalysisPanel } from "./analysis.js";
+import { RecordPanel } from "./record.js";
 import {
   MODE_PALETTE_ITEMS,
   ModeBar,
@@ -33,23 +33,31 @@ import {
   selectPaletteRoute,
   modeRoute,
   routeGlobalInput,
-  type InstrumentSurface,
+  type WorkspaceSurface,
   type TuiMode,
 } from "./modebar.js";
 
-const SURFACES: readonly InstrumentSurface[] = ["actions", "repl", "explorer", "observe"];
-const SURFACE_LABELS: Record<InstrumentSurface, string> = {
-  actions: "menu",
+export const ANALYSIS_SURFACES: readonly WorkspaceSurface[] = ["actions", "explorer", "record"];
+export const INSTRUMENT_SURFACES: readonly WorkspaceSurface[] = ["actions", "repl", "observe"];
+const SURFACE_LABELS: Record<WorkspaceSurface, string> = {
+  actions: "actions",
   repl: "console",
   explorer: "memory",
   observe: "output",
+  debug: "checks",
+  record: "record",
 };
 type Focus = "processes" | "targets" | "sessions" | "panel";
-type DebugSurface = "debug" | "observe";
 type PendingTargetLaunch = Pick<TargetLaunch, "target" | "processOverride" | "device">;
 
-export function cycleSurface(surface: InstrumentSurface): InstrumentSurface {
-  return SURFACES[(SURFACES.indexOf(surface) + 1) % SURFACES.length]!;
+export function surfacesForMode(mode: "analysis" | "instrument"): readonly WorkspaceSurface[] {
+  return mode === "analysis" ? ANALYSIS_SURFACES : INSTRUMENT_SURFACES;
+}
+
+export function cycleSurface(mode: "analysis" | "instrument", surface: WorkspaceSurface): WorkspaceSurface {
+  const surfaces = surfacesForMode(mode);
+  const index = surfaces.indexOf(surface);
+  return surfaces[(Math.max(0, index) + 1) % surfaces.length]!;
 }
 
 export function launchForProcess(process: ProcessCandidate): LaunchRequest {
@@ -94,13 +102,12 @@ function HelpPanel(): React.JSX.Element {
     <Box flexDirection="column" paddingX={2} paddingY={1}>
       <Text bold color="cyan">How flab works</Text>
       <Text><Text bold>1 Connect</Text> — choose a device and a running app or saved game.</Text>
-      <Text><Text bold>2 Mods</Text> — use the connected game's readable controls and mod actions.</Text>
-      <Text><Text bold>3 Inspect</Text> — read game structure, errors, hooks, and live output.</Text>
+      <Text><Text bold>2 Analyze</Text> — discover structure, memory, and Record one human-play scenario.</Text>
+      <Text><Text bold>3 Instrument</Text> — run linked game features and inspect output.</Text>
       <Text> </Text>
-      <Text>Start: type a game name · ↑/↓ choose · Enter connect · Tab switches lists</Text>
-      <Text>Device: Ctrl+V cycles local, USB/mobile, exact, and remote devices</Text>
-      <Text>Session: Ctrl+P all tools · Ctrl+R retry · Ctrl+W close · Ctrl+Q quit</Text>
-      <Text dimColor>Advanced tools such as manual PID/spawn, REPL, memory, and logs live in Ctrl+P.</Text>
+      <Text>Navigate: ↑/↓ choose · Enter open · Esc back</Text>
+      <Text>Workspace: Ctrl+P switch · ] next surface · ? help</Text>
+      <Text>Session: Ctrl+R retry · Ctrl+W close · Ctrl+Q quit</Text>
       <Text color="yellow">? or Esc → close help</Text>
     </Box>
   );
@@ -110,9 +117,9 @@ function NoSession({ mode }: { mode: TuiMode }): React.JSX.Element {
   return (
     <Box paddingX={2} paddingY={1} flexDirection="column">
       <Text bold color="cyan">Connect a game first</Text>
-      <Text>{mode === "analysis" || mode === "debug" ? "Inspect" : "Mods"} opens after a live connection exists.</Text>
+      <Text>{mode === "analysis" ? "Analyze" : "Instrument"} opens after a live connection exists.</Text>
       <Text>Press Ctrl+D, type the game name, then press Enter.</Text>
-      <Text dimColor>USB/mobile/remote device: Ctrl+V · manual PID/spawn: Ctrl+P</Text>
+      <Text dimColor>Ctrl+V device · Ctrl+D running apps · Ctrl+T saved games</Text>
     </Box>
   );
 }
@@ -187,7 +194,7 @@ function ConnectPanel(props: {
         </>
       )}
       <Text> </Text>
-      <Text dimColor>Flow: Connect → Mods → Inspect · Ctrl+P opens advanced tools</Text>
+      <Text dimColor>Flow: Connect → Analyze → Instrument</Text>
     </Box>
   );
 }
@@ -217,8 +224,7 @@ export function App({
   const [deviceLabels, setDeviceLabels] = React.useState<Record<string, string>>({});
 
   const [mode, setMode] = React.useState<TuiMode>(initialTarget ? "instrument" : "project");
-  const [surface, setSurface] = React.useState<InstrumentSurface>("actions");
-  const [debugSurface, setDebugSurface] = React.useState<DebugSurface>("debug");
+  const [surface, setSurface] = React.useState<WorkspaceSurface>("actions");
   const [focus, setFocus] = React.useState<Focus>(initialTarget ? "panel" : "processes");
   const [paletteOpen, setPaletteOpen] = React.useState(false);
   const [paletteIndex, setPaletteIndex] = React.useState(0);
@@ -307,14 +313,14 @@ export function App({
 
   const openSession = (
     opened: ReturnType<typeof workbench.open>,
-    destination: "mods" | "inspect" = "mods",
+    destination: "instrument" | "analyze" = "instrument",
   ): void => {
     if (!opened) {
       setNotice(`session cap reached (${MAX_SESSIONS}) — Ctrl+W closes active session`);
       return;
     }
     setNotice(null);
-    setMode(destination === "inspect" ? "analysis" : "instrument");
+    setMode(destination === "analyze" ? "analysis" : "instrument");
     setSurface("actions");
     setFocus("panel");
   };
@@ -330,7 +336,7 @@ export function App({
       setFocus("panel");
       return;
     }
-    openSession(workbench.open(selectedRequest), "inspect");
+    openSession(workbench.open(selectedRequest), "analyze");
   };
 
   const openProjectMode = (message: string): void => {
@@ -389,9 +395,9 @@ export function App({
       } else if (key.downArrow) {
         setPaletteIndex((index) => (index + 1) % MODE_PALETTE_ITEMS.length);
       } else if (key.return) {
-        const route = selectPaletteRoute({ mode, surface }, paletteIndex);
-        setMode(route.mode);
-        setSurface(route.surface);
+        const next = selectPaletteRoute({ mode, surface }, paletteIndex);
+        setMode(next.mode);
+        setSurface(next.surface);
         setPaletteOpen(false);
         setFocus("panel");
       }
@@ -425,8 +431,7 @@ export function App({
       return;
     }
     if (key.ctrl && ch === "p") {
-      const selected = MODE_PALETTE_ITEMS.findIndex((item) =>
-        item.mode === mode && (mode !== "instrument" || item.surface === surface));
+      const selected = MODE_PALETTE_ITEMS.findIndex((item) => item.mode === mode);
       setPaletteIndex(selected >= 0 ? selected : 0);
       setPaletteOpen(true);
       return;
@@ -467,11 +472,11 @@ export function App({
     }
     if (ch === "2") {
       if (!active) {
-        setNotice("Connect to a game before opening Mods");
+        setNotice("Connect to a game before opening Analyze");
         setFocus("processes");
         return;
       }
-      setMode("instrument");
+      setMode("analysis");
       setSurface("actions");
       setNotice(null);
       setFocus("panel");
@@ -479,11 +484,12 @@ export function App({
     }
     if (ch === "3") {
       if (!active) {
-        setNotice("Connect to a game before opening Inspect");
+        setNotice("Connect to a game before opening Instrument");
         setFocus("processes");
         return;
       }
-      setMode("analysis");
+      setMode("instrument");
+      setSurface("actions");
       setNotice(null);
       setFocus("panel");
       return;
@@ -502,15 +508,16 @@ export function App({
       return;
     }
     if (ch === "]" && focus === "panel" && active) {
-      if (mode === "instrument") setSurface((current) => cycleSurface(current));
-      else if (mode === "debug") setDebugSurface((current) => current === "debug" ? "observe" : "debug");
+      if (mode === "instrument" || mode === "analysis") {
+        setSurface((current) => cycleSurface(mode, current));
+      }
       return;
     }
     if (key.tab) {
       if (!active && focus !== "panel") {
         setNotice(null);
         setFocus((current) => current === "processes" ? "targets" : "processes");
-      } else if (active || mode === "project" || mode === "probe") {
+      } else if (active || mode === "project") {
         setFocus("panel");
       }
       return;
@@ -604,32 +611,36 @@ export function App({
         />
       );
     }
-    if (mode === "probe") {
-      return <ProbePanel focused={panelFocused} onCaptureChange={setInputCaptured} onLaunch={openLaunch} />;
-    }
     if (!active) return <NoSession mode={mode} />;
     if (mode === "analysis") {
-      return <AnalysisPanel session={active} focused={panelFocused} onCaptureChange={setInputCaptured} />;
-    }
-    if (mode === "debug") {
       return (
         <>
           <Box paddingX={1}>
-            <Text dimColor>{debugSurface === "debug" ? "[checks] · output" : "checks · [output]"} · ] next</Text>
+            <Text dimColor>
+              {ANALYSIS_SURFACES.map((item) => item === surface ? `[${SURFACE_LABELS[item]}]` : SURFACE_LABELS[item]).join(" · ")} · ] next
+            </Text>
           </Box>
-          <Box display={debugSurface === "debug" ? "flex" : "none"} flexDirection="column" flexGrow={1}>
-            <DebugPanel
-              key={`d${active.id}`}
+          <Box display={surface === "actions" ? "flex" : "none"} flexDirection="column" flexGrow={1}>
+            <AnalysisPanel
+              key={`an${active.id}`}
               session={active}
-              focused={panelFocused && debugSurface === "debug"}
+              focused={panelFocused && surface === "actions"}
               onCaptureChange={setInputCaptured}
             />
           </Box>
-          <Box display={debugSurface === "observe" ? "flex" : "none"} flexDirection="column" flexGrow={1}>
-            <Observe
-              key={`do${active.id}`}
+          <Box display={surface === "explorer" ? "flex" : "none"} flexDirection="column" flexGrow={1}>
+            <Explorer
+              key={`ae${active.id}`}
               session={active}
-              focused={panelFocused && debugSurface === "observe"}
+              focused={panelFocused && surface === "explorer"}
+              onCaptureChange={setInputCaptured}
+            />
+          </Box>
+          <Box display={surface === "record" ? "flex" : "none"} flexDirection="column" flexGrow={1}>
+            <RecordPanel
+              key={`record${active.id}`}
+              session={active}
+              focused={panelFocused && surface === "record"}
               onCaptureChange={setInputCaptured}
             />
           </Box>
@@ -641,7 +652,7 @@ export function App({
       <>
         <Box paddingX={1}>
           <Text dimColor>
-            {SURFACES.map((item) => item === surface ? `[${SURFACE_LABELS[item]}]` : SURFACE_LABELS[item]).join(" · ")} · ] next
+            {INSTRUMENT_SURFACES.map((item) => item === surface ? `[${SURFACE_LABELS[item]}]` : SURFACE_LABELS[item]).join(" · ")} · ] next
           </Text>
         </Box>
         <Box display={surface === "actions" ? "flex" : "none"} flexDirection="column" flexGrow={1}>
@@ -654,14 +665,6 @@ export function App({
         </Box>
         <Box display={surface === "repl" ? "flex" : "none"} flexDirection="column" flexGrow={1}>
           <Repl key={`r${active.id}`} session={active} focused={panelFocused && surface === "repl"} />
-        </Box>
-        <Box display={surface === "explorer" ? "flex" : "none"} flexDirection="column" flexGrow={1}>
-          <Explorer
-            key={`e${active.id}`}
-            session={active}
-            focused={panelFocused && surface === "explorer"}
-            onCaptureChange={setInputCaptured}
-          />
         </Box>
         <Box display={surface === "observe" ? "flex" : "none"} flexDirection="column" flexGrow={1}>
           <Observe
@@ -683,7 +686,7 @@ export function App({
   return (
     <Box flexDirection="column">
       <StatusHeader session={active} deviceLabel={selectedDeviceLabel} compact={compact} />
-      <ModeBar route={route} paletteOpen={paletteOpen} connected={Boolean(active)} compact={compact} />
+      <ModeBar route={route} connected={Boolean(active)} compact={compact} />
       <Box>
         {(!minimal || !minimalMainVisible) && <Sidebar
           expanded={minimal}

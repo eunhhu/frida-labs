@@ -388,7 +388,12 @@ export async function startSession(opts: SessionOptions, ev: SessionEvents): Pro
     if (m.type === frida.MessageType.Send) {
       const p = m.payload as { type?: string; line?: string } | null;
       if (p && typeof p === "object") ev.onEvent?.(p as Record<string, unknown>);
-      ev.onLog(p && p.type === "log" ? `[agent] ${p.line}` : `[send] ${JSON.stringify(p)}`);
+      // Record events may fire thousands of times and are persisted through
+      // the structured channel. Flattening them into logs duplicates data,
+      // floods stderr/TUI rings, and destroys analysis throughput.
+      if (p?.type !== "flab.record.event" && p?.type !== "flab.record.state") {
+        ev.onLog(p && p.type === "log" ? `[agent] ${p.line}` : `[send] ${JSON.stringify(p)}`);
+      }
     } else if (m.type === frida.MessageType.Error) {
       const detail = m.stack ?? m.description ?? "agent error";
       ev.onAgentError?.(detail);

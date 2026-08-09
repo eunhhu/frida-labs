@@ -15,6 +15,14 @@ test("every coding harness resolves the same game-mod completion contract", () =
   const guide = read("docs/agent-game-mod-guide.md");
   for (const phrase of [
     "flab.ndjson.v1",
+    "flab.control.v1",
+    "flab acp",
+    "flab mcp",
+    "record.plan",
+    "record.summary",
+    "instrument.source.write",
+    "module.link",
+    "instrument.package",
     "modInfo",
     "modHelp",
     "modState",
@@ -29,7 +37,7 @@ test("every coding harness resolves the same game-mod completion contract", () =
     "semantic-model.json",
     "aim assist",
     "ESP/awareness",
-    "movement trainer",
+    "movement assistance",
     "memory write watch",
     "auto-fire",
   ]) {
@@ -48,7 +56,11 @@ test("every coding harness resolves the same game-mod completion contract", () =
     expect(skill).toContain("economy/reward");
     expect(skill).toContain("aim assist");
     expect(skill).toContain("ESP/awareness");
-    expect(skill).toContain("movement trainer");
+    expect(skill).toContain("movement assistance");
+    expect(skill).toContain("flab.control.v1");
+    expect(skill).toContain("flab acp");
+    expect(skill).toContain("flab mcp");
+    expect(skill).toContain("record.plan");
     expect(skill).not.toContain("TODO");
   }
 });
@@ -59,6 +71,33 @@ test("harness-native invocation adapters remain discoverable", () => {
   expect(readme).toContain("$build-game-mod");
   expect(readme).toContain("/build-game-mod");
   expect(readme).toContain("/game-mod");
+  expect(readme).toContain("flab agent --json");
+  expect(readme).toContain("flab acp");
+  expect(readme).toContain("flab mcp");
+  expect(readme).toContain('gjc --mcp-config "$PWD/.mcp.json"');
+
+  expect(JSON.parse(read(".mcp.json"))).toEqual({
+    mcpServers: {
+      flab: {
+        type: "stdio",
+        command: "bun",
+        args: ["src/bin.ts", "mcp"],
+      },
+    },
+  });
+  expect(read(".codex/config.toml")).toContain("[mcp_servers.flab]");
+  expect(read(".codex/config.toml")).toContain('args = ["src/bin.ts", "mcp"]');
+
+  const control = read("docs/agent-control-api.md");
+  expect(control).toContain("owned-offline");
+  expect(control).toContain("private-lab");
+  expect(control).toContain("participantsConsented");
+  expect(control).toContain("instrument.source.write");
+  expect(control).toContain("module.link");
+  expect(control).toContain("instrument.package");
+  expect(control).toContain("flab_control");
+  expect(control).toContain("record.summary");
+  expect(control).toContain("Never use prompt");
 
   const gjc = read(".gjc/config.yml");
   expect(gjc).toContain("enabled: true");

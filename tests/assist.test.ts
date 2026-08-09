@@ -9,7 +9,7 @@ import {
   smoothAim,
   type AimView,
 } from "../agent/lib/assist.js";
-import { createMovementTrainer, normalizeMovementPatch } from "../agent/lib/ue/movement.js";
+import { createMovementInstrument, normalizeMovementPatch } from "../agent/lib/ue/movement.js";
 
 test("aim math handles wrapped angles and bounded smoothing", () => {
   expect(normalizeDegrees(181)).toBe(-179);
@@ -45,7 +45,7 @@ test("aim policy and movement patches reject unknown or unbounded input", () => 
   expect(() => normalizeMovementPatch({ teleport: 1 })).toThrow("unknown movement field");
   expect(() => normalizeMovementPatch({ gravity: 101 })).toThrow("gravity");
   expect(() => normalizeMovementPatch({})).toThrow("at least one field");
-  expect(() => createMovementTrainer().enforce(true, 49)).toThrow("intervalMs");
+  expect(() => createMovementInstrument().enforce(true, 49)).toThrow("intervalMs");
 });
 
 test("continuous aim requires offline confirmation and a live engagement gate", () => {

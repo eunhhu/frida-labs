@@ -1,0 +1,3 @@
+[mcp_servers.flab]
+command = "bun"
+args = ["src/bin.ts", "mcp"]
