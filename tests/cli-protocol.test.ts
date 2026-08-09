@@ -68,7 +68,7 @@ test("global and command help are successful and beginner-oriented", async () =>
   const global = capture();
   expect(await runCli(["--help"], global.io)).toBe(0);
   expect(global.err).toEqual([]);
-  expect(global.out[0]).toContain("Connect → Mods → Inspect");
+  expect(global.out[0]).toContain("Connect → Analyze → Instrument");
   expect(global.out[0]).toContain("flab <command> --help");
 
   const command = capture();
@@ -118,12 +118,16 @@ test("value flags remain order-independent and reject missing values", () => {
 
 test("the registry exposes the approved device-aware command scope", () => {
   expect(commands.map((command) => command.name)).toEqual([
+    "acp",
+    "mcp",
+    "agent",
     "devices",
     "processes",
     "targets",
     "new",
     "target",
     "build",
+    "package",
     "run",
     "probe",
     "capabilities",
@@ -132,6 +136,9 @@ test("the registry exposes the approved device-aware command scope", () => {
     "doctor",
   ]);
   const deviceFlags = ["device", "host", "device-timeout"];
+  expect(commands.find((command) => command.name === "acp")?.allowedFlags).toEqual(["json", "upstream"]);
+  expect(commands.find((command) => command.name === "mcp")?.allowedFlags).toEqual([]);
+  expect(commands.find((command) => command.name === "agent")?.allowedFlags).toEqual(["json"]);
   expect(commands.find((command) => command.name === "devices")?.allowedFlags).toEqual(["json", ...deviceFlags]);
   expect(commands.find((command) => command.name === "processes")?.allowedFlags).toEqual(["json", "limit", "query", ...deviceFlags]);
   expect(commands.find((command) => command.name === "probe")?.allowedFlags).toEqual(["json", "pid", "spawn", "eval", "session", ...deviceFlags]);
@@ -140,6 +147,7 @@ test("the registry exposes the approved device-aware command scope", () => {
   expect(commands.find((command) => command.name === "targets")?.allowedFlags).toEqual(["json"]);
   expect(commands.find((command) => command.name === "new")?.allowedFlags).toEqual(["json", "proc", ...deviceFlags]);
   expect(commands.find((command) => command.name === "build")?.allowedFlags).toEqual(["json", "out"]);
+  expect(commands.find((command) => command.name === "package")?.allowedFlags).toEqual(["json", "out"]);
   expect(commands.find((command) => command.name === "lib")?.allowedFlags).toEqual(["json"]);
   expect(commands.find((command) => command.name === "depcheck")?.allowedFlags).toEqual(["json"]);
   expect(commands.find((command) => command.name === "doctor")?.allowedFlags).toEqual(["json", ...deviceFlags]);

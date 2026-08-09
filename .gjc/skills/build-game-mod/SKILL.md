@@ -1,20 +1,25 @@
 ---
 name: build-game-mod
-description: Analyze an authorized offline or single-player game on a local, USB/mobile, exact Frida device, or remote endpoint; map objectives/win-loss, economy/rewards, gameplay, and accessibility/training surfaces; then build and live-verify a game-specific frida-labs target whose descriptors drive a visible TUI mod menu, REPL, and persistent AI action session. Use for new games, mods, QoL, safe runtime content, attach/spawn analysis, and full cleanup/reattach verification. Never use for online cheating, anti-cheat bypass, or unauthorized processes.
+description: Analyze an authorized owned-offline game or fully owned, consenting, isolated private lab; then build, live-verify, and package a game-specific frida-labs Instrument whose descriptors drive the human TUI and vendor-neutral ACP/MCP Agent API. Use for new games, Instruments, QoL/content, attach/spawn analysis, and cleanup/reattach verification. Never use for public play, anti-cheat bypass, or unauthorized processes.
 ---
 
 # Build Game Mod
 
 Read `docs/agent-game-mod-guide.md` completely and follow it as the completion
 gate. Resolve the request's game, process, device, attach/spawn mode, and feature
-priorities. Recon the exact selected device before scaffolding. Build one target
-whose live descriptors, human labels, and categories form the TUI mod menu and
-the same REPL/NDJSON action surface. Produce subsystem coverage, safe reversible
+priorities. Recon the exact selected device before scaffolding. When a human can
+perform one isolated action, use bounded `record.plan/start/status/stop/summary/read`
+evidence. Build one target
+whose live descriptors, human labels, and categories form the TUI and the same
+REPL/NDJSON Agent surface. Produce subsystem coverage, safe reversible
 actions, an objectives/win-loss and economy/reward semantic model, and discovered
-aim assist, ESP/awareness, movement trainer, accessibility, and training features.
+aim assist, ESP/awareness, movement assistance, accessibility, and training features.
 Continuous assists stay off by default, require a live engagement gate and
 explicit offline confirmation, and never include auto-fire. Produce cleanup,
-real runtime receipts, a clean reattach, and target-local usage.
+real runtime receipts, a clean reattach, a checksummed package, and target-local
+usage. Prefer `flab acp` or `flab mcp`; direct `flab agent --json` remains
+compatible. Use their shared `flab.control.v1` for Record, source, module-link,
+build, live, and package work.
 
 Do not claim success from compilation alone. Emit `LIVE VERIFICATION BLOCKED`
 with the exact blocker when the game or device cannot be exercised.

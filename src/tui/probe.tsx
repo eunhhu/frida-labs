@@ -131,18 +131,22 @@ export function TargetLaunchPanel(props: {
       <Text>Running app: {props.processOverride ?? "use saved process name"}</Text>
       <Text>Device: {props.deviceLabel ?? (props.device ? deviceSelectorLabel(props.device) : "use saved/default device")}</Text>
       <Text> </Text>
-      <Text bold color="green">Enter → connect and open Mods</Text>
-      <Text dimColor>Esc → back · a → {advanced ? "hide" : "show"} advanced launch options</Text>
-      {advanced && (
+      {!advanced ? (
+        <Box flexDirection="column">
+          <Text bold color="green">[Enter] Connect and open Instrument</Text>
+          <Text dimColor>[A] Advanced launch options</Text>
+          <Text dimColor>[Esc] Back</Text>
+        </Box>
+      ) : (
         <Box flexDirection="column" marginTop={1}>
           <Text bold color="yellow">Advanced launch options</Text>
           <Text color={spawnGating ? "cyan" : undefined}>
-            [{spawnGating ? "x" : " "}] Pause newly spawned processes (s)
+            [S] Pause newly spawned processes: {spawnGating ? "on" : "off"}
           </Text>
           <Text color={childGating ? "cyan" : undefined}>
-            [{childGating ? "x" : " "}] Follow child processes (c)
+            [C] Follow child processes: {childGating ? "on" : "off"}
           </Text>
-          <Text dimColor>Most games do not need these. Use them for launchers or child processes.</Text>
+          <Text dimColor>[A] Done</Text>
         </Box>
       )}
     </Box>
@@ -242,7 +246,7 @@ export function ProbePanel(props: ProbePanelProps): React.JSX.Element {
       <Box flexDirection="column">
         <Text bold color="yellow">Manual connect (advanced)</Text>
         <Text>Use this only when the running-app or saved-game lists cannot identify the target.</Text>
-        <Text dimColor>←/→ method · type value · Enter connect · Esc clear</Text>
+        <Text dimColor>←/→ method · Enter edit/connect · Esc clear</Text>
       </Box>
       <Text>
         {VARIANTS.map((candidate) => candidate === variant ? `[${LABELS[candidate]}]` : ` ${LABELS[candidate]} `).join(" ")}

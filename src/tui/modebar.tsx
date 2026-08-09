@@ -1,19 +1,20 @@
 import React from "react";
 import { Box, Text } from "ink";
 
-export type TuiMode = "project" | "instrument" | "debug" | "probe" | "analysis";
+export type TuiMode = "project" | "analysis" | "instrument";
 
 export type ModeRoute =
   | {
       mode: "project";
       view: "list" | "create" | "edit" | "rename" | "unregister" | "delete-confirm";
     }
-  | { mode: "probe"; view: "form" | "launching" }
-  | { mode: "instrument" | "debug" | "analysis"; sessionId: number | null };
+  | { mode: "instrument" | "analysis"; sessionId: number | null };
 
-export const MODES: readonly TuiMode[] = ["project", "instrument", "debug", "probe", "analysis"];
+export const MODES: readonly TuiMode[] = ["project", "analysis", "instrument"];
 
-export type InstrumentSurface = "actions" | "repl" | "explorer" | "observe";
+export type WorkspaceSurface = "actions" | "explorer" | "record" | "debug" | "repl" | "observe";
+/** Compatibility name for extensions compiled against the prior TUI types. */
+export type InstrumentSurface = WorkspaceSurface;
 
 export interface ModePaletteItem {
   id: string;
@@ -27,7 +28,7 @@ export interface ModeSelection {
   surface: InstrumentSurface;
 }
 export type GlobalInputRoute = "quit" | "captured" | "global";
-export type JourneyStage = "connect" | "mods" | "inspect";
+export type JourneyStage = "connect" | "analyze" | "instrument";
 
 export function routeGlobalInput(
   captured: boolean,
@@ -41,25 +42,18 @@ export function routeGlobalInput(
 
 export function modeRoute(mode: TuiMode, sessionId: number | null): ModeRoute {
   if (mode === "project") return { mode, view: "list" };
-  if (mode === "probe") return { mode, view: "form" };
   return { mode, sessionId };
 }
 
 export const MODE_PALETTE_ITEMS: readonly ModePaletteItem[] = [
-  { id: "project", label: "1 Connect · Manage saved games", mode: "project" },
-  { id: "probe", label: "1 Connect · Manual PID/name/spawn (advanced)", mode: "probe" },
-  { id: "instrument", label: "2 Mods · Game controls", mode: "instrument", surface: "actions" },
-  { id: "repl", label: "2 Mods · Command console (advanced)", mode: "instrument", surface: "repl" },
-  { id: "explorer", label: "2 Mods · Memory explorer (advanced)", mode: "instrument", surface: "explorer" },
-  { id: "observe", label: "2 Mods · Live output", mode: "instrument", surface: "observe" },
-  { id: "analysis", label: "3 Inspect · Read game structure", mode: "analysis" },
-  { id: "debug", label: "3 Inspect · Errors and hook checks", mode: "debug" },
+  { id: "project", label: "1 Connect · choose and manage a game", mode: "project" },
+  { id: "analysis", label: "2 Analyze · discover and verify structure", mode: "analysis", surface: "actions" },
+  { id: "instrument", label: "3 Instrument · run linked game features", mode: "instrument", surface: "actions" },
 ];
 
 export function journeyStage(route: ModeRoute): JourneyStage {
-  if (route.mode === "instrument") return "mods";
-  if (route.mode === "analysis" || route.mode === "debug") return "inspect";
-  return "connect";
+  if (route.mode === "project") return "connect";
+  return route.mode === "analysis" ? "analyze" : "instrument";
 }
 
 export function paletteItemAt(index: number): ModePaletteItem {
@@ -73,7 +67,7 @@ export function selectPaletteRoute(current: ModeSelection, index: number): ModeS
   const item = paletteItemAt(index);
   return {
     mode: item.mode,
-    surface: item.surface ?? current.surface,
+    surface: item.surface ?? (item.mode === current.mode ? current.surface : "actions"),
   };
 }
 
@@ -89,29 +83,24 @@ export function nextMode(mode: TuiMode): TuiMode {
 
 export function ModeBar({
   route,
-  paletteOpen,
   connected,
   compact,
 }: {
   route: ModeRoute;
-  paletteOpen: boolean;
   connected: boolean;
   compact: boolean;
 }): React.JSX.Element {
   const stage = journeyStage(route);
   const steps: Array<{ id: JourneyStage; label: string }> = [
-    { id: "connect", label: "1: connect" },
-    { id: "mods", label: "2: mods" },
-    { id: "inspect", label: "3: inspect" },
+    { id: "connect", label: "1 Connect" },
+    { id: "analyze", label: "2 Analyze" },
+    { id: "instrument", label: "3 Instrument" },
   ];
   return (
     <Box paddingX={1}>
       <Text>
         {steps.map((step) => step.id === stage ? `[${step.label}]` : ` ${step.label} `).join("  →  ")}
-        {!compact && <>{"   "}<Text dimColor>{connected ? "session stays connected" : "choose a game, then Enter"}</Text></>}
-        {"   "}<Text color={paletteOpen ? "yellow" : undefined} bold={paletteOpen}>
-          ^p {compact ? "tools" : "all tools"}{paletteOpen ? " [open]" : ""}
-        </Text>
+        {!compact && <>{"   "}<Text dimColor>{connected ? "live" : "choose game"}</Text></>}
       </Text>
     </Box>
   );
@@ -121,13 +110,13 @@ export function ModePalette({ index }: { index: number }): React.JSX.Element {
   const selected = paletteItemAt(index);
   return (
     <Box flexDirection="column" borderStyle="round" borderColor="yellow" paddingX={1}>
-      <Text bold color="yellow">all tools</Text>
+      <Text bold color="yellow">Choose workspace</Text>
       {MODE_PALETTE_ITEMS.map((item) => (
         <Text key={item.id} color={item.id === selected.id ? "cyan" : undefined}>
           {item.id === selected.id ? "❯ " : "  "}{item.label}
         </Text>
       ))}
-      <Text dimColor>↑/↓ choose · Enter open · Ctrl+P/Esc back</Text>
+      <Text dimColor>↑/↓ choose · Enter open · Esc back</Text>
     </Box>
   );
 }

@@ -19,7 +19,7 @@ if (argv.length === 0 && process.stdin.isTTY && process.stdout.isTTY) {
     console.log([
       "flab tui [target] [--proc P] [--device DEVICE | --host HOST]",
       "",
-      "Guided human flow: Connect → Mods → Inspect.",
+      "Guided human flow: Connect → Analyze → Instrument.",
       "Omit target to search running apps or choose a saved game.",
       "Provide target to connect it immediately using saved settings.",
     ].join("\n"));

@@ -10,7 +10,8 @@ import {
   type TargetConfig,
 } from "../core/index.js";
 
-const VIEW = 12;
+/** UX invariant: three selectable Instruments maximum. */
+export const PROJECT_VIEW = 3;
 type Target = { name: string; config: TargetConfig };
 type TargetMode = "attach" | "spawn";
 export interface ProjectCreateRequest { id: number; process: string; suggestedName: string; device?: DeviceSelector }
@@ -323,8 +324,8 @@ export function ProjectPanel(props: {
     }
   }, { isActive: props.focused });
 
-  const windowStart = Math.max(0, Math.min(clamped - (VIEW >> 1), Math.max(0, targets.length - VIEW)));
-  const visible = targets.slice(windowStart, windowStart + VIEW);
+  const windowStart = Math.max(0, Math.min(clamped - (PROJECT_VIEW >> 1), Math.max(0, targets.length - PROJECT_VIEW)));
+  const visible = targets.slice(windowStart, windowStart + PROJECT_VIEW);
 
   const formView = form && (
     <Box flexDirection="column" borderStyle="round" borderColor={form.kind === "delete" ? "red" : "yellow"} paddingX={1}>
@@ -416,8 +417,8 @@ export function ProjectPanel(props: {
   return (
     <Box flexDirection="column" flexGrow={1} paddingX={1}>
       <Box flexDirection="column">
-        <Text bold>projects</Text>
-        <Text dimColor>↑/↓ select · n/e/r/u/d manage · d deletes sources</Text>
+        <Text bold>saved Instruments</Text>
+        <Text dimColor>↑/↓ select · n create · e edit</Text>
       </Box>
       {targets.length === 0 && <Text dimColor>no registered targets — press n to create one</Text>}
       {visible.map((target, index) => {

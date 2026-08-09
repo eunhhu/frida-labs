@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "flab": {
+      "type": "stdio",
+      "command": "bun",
+      "args": ["src/bin.ts", "mcp"]
+    }
+  }
+}

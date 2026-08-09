@@ -8,7 +8,7 @@ everything below works the same on Windows and Unix.
 ```sh
 bun install
 flab run <target> [--spawn]      # compile + attach + REPL (hot reload)
-flab tui [target]                # five-mode Project/Instrument/Debug/Probe/Analysis TUI
+flab tui [target]                # three-mode Connect/Analyze/Instrument TUI
 flab processes                   # discover processes and target matches
 flab devices                     # enumerate local/USB/remote Frida devices
 flab processes --device usb      # discover on first USB/mobile device
@@ -17,10 +17,15 @@ flab run <target> --host H:27042 # explicit remote endpoint
 flab probe "Some Game.exe"       # one-shot engine-agnostic recon
 flab probe --pid 1234            # explicit numeric attach; positional digits stay names
 flab capabilities --json         # discover persistent AI-agent protocol
+flab acp detect --json           # discover installed ACP upstream agents
+flab acp [--upstream <id|json>]  # ACP v1 gateway + automatic flab MCP injection
+flab mcp                         # direct stdio MCP server for any MCP harness
+flab agent --json                # global author/link/build/verify/package API
 flab probe --pid 1234 --session --json # persistent typed NDJSON session
 flab new <name> ["Proc.exe"]     # scaffold + register a target
 flab target <operation> ...      # set/rename/unregister/delete
 flab build <target>              # compile only
+flab package <target>            # checksummed distributable Instrument artifact
 flab depcheck                    # targets → agent/lib dependency gate
 flab doctor                      # environment sanity (runtime, frida server, processes)
 bun run typecheck
@@ -29,11 +34,13 @@ bun run typecheck
 `flab` = `bun run flab` (bin: `src/bin.ts`). All commands support `--json`
 for machine consumption.
 
-The TUI starts in Project mode and keeps one Workbench/Store across Project,
-Instrument, Debug, Probe, and Analysis. `Ctrl+P` opens the mode/action palette.
-Instrument leads with managed create/list/status/update/stop/delete actions, then
-retains Actions, REPL, Explorer, and Observe without reattaching. Debug centers
-crash/exception/hook-verification evidence.
+The TUI keeps one Workbench/Store across exactly three modes: Connect, Analyze,
+and Instrument. Every visible selectable list is capped at three rows. Analyze
+contains read-only Actions, Explorer, and Record surfaces; Instrument contains
+Actions, REPL, and Observe. Mode and surface switches never reattach. Record
+offers exactly Plan, Record, and Stop + summarize, then persists bounded
+evidence under `artifacts/records/`. Generic probe, every saved target, and the
+target scaffold expose the shared `agent/lib/recording.ts` RPC/descriptors.
 Probe accepts disjoint name, positive-PID, and spawn requests; target launches
 present independent spawn- and child-gating controls. Analysis is authorized
 only by the current live descriptor as `analysis` + `read`. `j`/`k` scroll the
@@ -53,8 +60,11 @@ Two processes, one boundary:
   the `frida` npm package, injects, and hot-reloads on save.
   `core/index.ts` is the public barrel — the programmatic interface.
   `cli/index.ts` (argv) uses the `core/commands.ts` registry;
-  `tui/index.tsx` (ink) uses the same core SessionEngine, ActionService, and
-  ProjectService boundaries. Put shared behavior in core, not in a frontend.
+  `tui/index.tsx` (ink), `core/control.ts` (vendor-neutral Agent API),
+  `core/acp.ts` (ACP gateway), and `core/mcp.ts` (MCP tools) use the
+  same SessionEngine, ActionService, ProjectService, Instrument source,
+  module-link, Record, and package boundaries. Put shared behavior in core, not
+  in a frontend. `core/records.ts` owns persisted, bounded human-play traces.
 - **agent/** (frida-gum): runs inside the game. `lib/` is the reusable
   toolkit (mem, hook, search, mono, ue, il2cpp, assist, detect, watch, strings,
   cocos); `targets/<name>/` is per-game glue.
@@ -92,7 +102,7 @@ not document individual games in repo-level docs.
   rejected by `flab depcheck`.
 - No TODO stubs, dead code, or commented-out experiments in merged targets.
 - New game-specific surfaces provide concise `label` and `category` descriptor
-  metadata. Instrument renders these as the mod menu while stable RPC names stay
+  metadata. Instrument renders these as its action menu while stable RPC names stay
   shared by REPL and NDJSON callers.
 - TUI modules import the `src/core/index.ts` barrel only. They never import
   `frida`, `agent/lib`, or target modules directly; authorization and launch
@@ -103,21 +113,24 @@ not document individual games in repo-level docs.
 
 ## Agent workflows
 
-For new games, mods/trainers, QoL/content work, or end-to-end attach/spawn
+For new games, Instruments, QoL/content work, or end-to-end attach/spawn
 analysis, read `docs/agent-game-mod-guide.md` and invoke the `build-game-mod`
 project skill. It requires evidence-based subsystem coverage, a descriptor-led
-TUI mod menu, the same REPL/NDJSON action surface, cleanup, and a clean reattach.
+TUI Instrument, the same REPL/NDJSON action surface, cleanup, and a clean reattach.
 The completion contract includes objective/win-loss and economy/reward semantic
 mapping plus applicable default-off aim assist, ESP/awareness, reversible
-movement, accessibility, and training features for authorized offline play.
+movement, accessibility, and training features for authorized owned-offline or
+fully isolated private-lab testing.
 Target-specific user instructions belong in `agent/targets/<name>/README.md`;
 do not add individual-game details to root README/CLAUDE files.
 
 Harness entry points:
 
 - GJC: `.gjc/skills/build-game-mod`; `.gjc/config.yml` enables project scan;
-  invoke `/skill:build-game-mod ...`.
-- Codex: `.agents/skills/build-game-mod`; invoke `$build-game-mod ...`.
+  `.mcp.json` exposes flab in standalone `--mcp-config` mode; invoke
+  `/skill:build-game-mod ...`.
+- Codex: `.agents/skills/build-game-mod`; `.codex/config.toml` exposes flab MCP;
+  invoke `$build-game-mod ...`.
 - Claude Code: `.claude/skills/build-game-mod`; invoke `/build-game-mod ...`.
 - OpenCode: shared `.agents` skill plus `/game-mod ...` from
   `.opencode/commands/game-mod.md`.
@@ -126,8 +139,18 @@ The narrower `.gjc/skills/new-frida-target` and `.gjc/skills/frida-debug`
 remain useful for scaffold-only or debug-only work.
 
 The public automation boundary is `src/core/index.ts`: CLI uses
-`CommandRegistry`, TUI uses the same `SessionEngine`, `ProjectService`, and
-`ActionService`, and neither frontend imports Frida or agent modules directly.
+`CommandRegistry`; TUI and `flab.control.v1` use the same `SessionEngine`,
+`ProjectService`, `ActionService`, Instrument source, module-link, and package
+services. Neither frontend imports Frida or target modules directly.
 Target mutation JSON has exact operation-specific success/failure shapes. Probe
 supports one-shot evaluation and `--session --json`; the latter is strict
 `flab.ndjson.v1` and uses the same ActionService authorization as the TUI.
+ACP-capable clients prefer `flab acp`, which auto-detects or selects an upstream
+ACP agent and injects `flab mcp` into each ACP session. MCP-native harnesses use
+`flab mcp`; `flab agent --json` remains the direct compatibility transport.
+All authorize with a concrete owned-offline/private-lab profile, then perform
+connect, Record-assisted analysis, source/link, build, live verification,
+cleanup, and packaging without TUI scraping. See
+`docs/agent-control-api.md`. “Educational” wording alone is not authorization;
+public play, production economies, third-party accounts, and anti-cheat bypass
+remain outside the workflow.

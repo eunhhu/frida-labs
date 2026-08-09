@@ -1,6 +1,6 @@
 ---
 name: build-game-mod
-description: Analyze an authorized offline or single-player game on a local, USB/mobile, exact Frida device, or remote endpoint; map objectives/win-loss, economy/rewards, gameplay, and accessibility/training surfaces; then build and live-verify a game-specific frida-labs target whose descriptors drive a visible TUI mod menu, REPL, and persistent AI action session. Use when asked to add a game, create mods/trainers/QoL or new runtime content, map game systems, attach or spawn a target, or finish a target through cleanup and reattach evidence. Do not use for online cheating, anti-cheat bypass, or processes the user is not authorized to test.
+description: Analyze an authorized owned-offline game or fully owned, consenting, isolated private lab on a local, USB/mobile, exact Frida device, or remote endpoint; map objectives/win-loss, economy/rewards, gameplay, and accessibility/training surfaces; then build, live-verify, and package a game-specific frida-labs Instrument whose descriptors drive the human TUI and vendor-neutral ACP/MCP Agent API. Use when asked to add a game, create Instruments/QoL or new runtime content, map game systems, attach or spawn, or finish cleanup and reattach evidence. Do not use for public play, anti-cheat bypass, or processes the user is not authorized to test.
 ---
 
 # Build Game Mod
@@ -11,22 +11,25 @@ of done as the execution contract.
 
 ## Execute
 
-1. Confirm the request targets an authorized offline, single-player, or test
-   instance. Decline online cheating or anti-cheat bypass.
+1. Confirm an owned-offline instance or fully owned, consenting, isolated
+   private lab. Anti-cheat must be absent or officially disabled; decline public
+   play, production economies, third-party accounts, and anti-cheat bypass.
 2. Parse `GAME`, `PROCESS`, `DEVICE`, `MODE`, and `FEATURES` from the request.
    Discover missing process/device facts with `flab devices --json` and
    `flab processes ... --json`; ask only when authorization or identity remains
    ambiguous.
 3. Run preflight and a persistent generic-probe recon on the exact selected
-   device before scaffolding. Build an evidence-backed semantic model covering
+   device before scaffolding. When a human can perform one isolated gameplay
+   action, use bounded `record.plan/start/status/stop/summary/read` evidence
+   instead of guessing from names or screen state. Build a semantic model covering
    objectives/win-loss transitions, rewards, local economy sources/sinks,
    progression, combat, entities, save persistence, and available aim assist,
-   ESP/awareness, movement trainer, accessibility, and training surfaces.
+   ESP/awareness, movement assistance, accessibility, and training surfaces.
 4. Create or update one target. Reuse `agent/lib/`; keep game-specific glue in
    `agent/targets/<slug>/index.ts`.
 5. Expose a truthful live `__describe()` inventory. Include human `label` and
-   `category` metadata so the TUI is a readable mod menu, while stable RPC names
-   remain callable from the REPL and NDJSON session.
+   `category` metadata so the TUI is readable, while stable RPC names remain
+   callable from the REPL and NDJSON Agent API.
 6. Provide real `modInfo`, `modHelp`, `modState`, domain actions, and cleanup.
    Synthesize game-specific completion, economy, reward, combat, aim assist,
    ESP/awareness, and movement-training features only from discovered paths.
@@ -34,8 +37,10 @@ of done as the execution contract.
    by default. Continuous assistance requires a discovered engagement gate and
    explicit offline confirmation. Do not add auto-fire or claim content creation
    without a discovered creation path.
-7. Run static gates, then exercise the live REPL, TUI, and persistent machine
-   session. Test each shipped action, cleanup, close, and one clean reattach.
+7. Prefer `flab acp` for ACP clients or `flab mcp` for MCP harnesses; direct
+   `flab agent --json` remains compatible. Use their shared `flab.control.v1`
+   boundary for Record, source read/write, module linking, build, live actions,
+   cleanup, and packaging. Exercise the TUI, REPL, and one reattach.
 8. Write `agent/targets/<slug>/README.md`,
    `artifacts/<slug>/semantic-model.json`, and bounded experiment/verification
    receipts under `artifacts/<slug>/`.

@@ -3,7 +3,7 @@
 // edit it without importing TypeScript.
 
 import { readFileSync, existsSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { DeviceSelector } from "./devices.js";
 
@@ -31,6 +31,11 @@ export interface Manifest {
 /** Repo root: two levels up from this file, or cwd when running from a
  *  compiled binary (then the workspace is wherever flab is invoked). */
 export function repoRoot(): string {
+  const sessionWorkspace = process.env.FLAB_WORKSPACE;
+  if (sessionWorkspace) {
+    const selected = resolve(sessionWorkspace);
+    if (existsSync(join(selected, "frida-labs.json"))) return selected;
+  }
   const here = dirname(fileURLToPath(import.meta.url));
   const root = join(here, "..", "..");
   return existsSync(join(root, "frida-labs.json")) ? root : process.cwd();

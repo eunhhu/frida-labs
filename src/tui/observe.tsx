@@ -11,8 +11,8 @@ import { store, type LogLine, type SessionState } from "./store.js";
 const VIEW = 20;
 const LEVELS: Array<LogLine["level"] | "all"> = ["all", "info", "ok", "warn", "error"];
 const LEVEL_RANK: Record<LogLine["level"], number> = { info: 0, ok: 1, warn: 2, error: 3 };
-type ObserveView = "logs" | "actions" | "debug" | "crashes";
-const VIEWS: ObserveView[] = ["logs", "actions", "debug", "crashes"];
+type ObserveView = "logs" | "actions" | "crashes";
+const VIEWS: ObserveView[] = ["logs", "actions", "crashes"];
 
 const levelTint: Record<LogLine["level"], string> = {
   info: "gray", ok: "green", warn: "yellow", error: "red",
@@ -75,7 +75,6 @@ export function Observe(props: { session: SessionState; focused: boolean; onCapt
     if (ch === "v") { setView((current) => VIEWS[(VIEWS.indexOf(current) + 1) % VIEWS.length]!); return; }
     if (ch === "c") { setView("crashes"); return; }
     if (ch === "a") { setView("actions"); return; }
-    if (ch === "d") { setView("debug"); return; }
     if (ch === "h") {
       setHookState("probing …");
       void workbench
@@ -89,7 +88,7 @@ export function Observe(props: { session: SessionState; focused: boolean; onCapt
     <Box flexDirection="column" flexGrow={1} paddingX={1}>
       <Box flexDirection="column">
         <Text bold>observe · <Text color="cyan">{view}</Text></Text>
-        <Text dimColor>v cycle · a actions · d debug · c crashes · / filter · l level({minLevel}) · f freeze</Text>
+        <Text dimColor>v view · / filter · f freeze</Text>
       </Box>
       {session.dropped > 0 && (
         <Text dimColor>… {session.dropped} line(s) evicted from the 5000-line ring</Text>
@@ -119,17 +118,6 @@ export function Observe(props: { session: SessionState; focused: boolean; onCapt
               {receipt.status.padEnd(7)} {receipt.mode.padEnd(10)} {receipt.action}
               {receipt.verification ? ` · ${receipt.verification.state} fired=${receipt.verification.fired}` : ""}
               {receipt.error ? ` · ${receipt.error.code}: ${receipt.error.message}` : ""}
-            </Text>
-          ))}
-        </Box>
-      ) : view === "debug" ? (
-        <Box flexDirection="column" flexGrow={1}>
-          <Text bold>debug evidence ({session.debugEvents.length})</Text>
-          {session.droppedDebugEvents > 0 && <Text dimColor>… {session.droppedDebugEvents} event(s) evicted</Text>}
-          {session.debugEvents.length === 0 && <Text dimColor>none — lifecycle, crash, and hook receipts appear here</Text>}
-          {session.debugEvents.slice(-VIEW).map((event, index) => (
-            <Text key={`${event.timestamp}-${index}`} color={event.kind.includes("crash") || event.kind === "agent-exception" ? "red" : "gray"}>
-              {event.kind.padEnd(17)} {event.summary}{event.verification ? ` · ${event.verification.state} fired=${event.verification.fired}` : ""}
             </Text>
           ))}
         </Box>

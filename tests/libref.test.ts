@@ -3,6 +3,7 @@ import { libReference } from "../src/core/libref.js";
 
 test("agent library catalog contains only explicit top-level callable exports", () => {
   const modules = libReference();
+  expect(modules.every((module) => !module.module.includes("\\"))).toBe(true);
   const names = modules.flatMap((module) => module.functions.map((fn) => fn.name));
   for (const impossible of ["if", "return", "for"]) expect(names).not.toContain(impossible);
 
@@ -23,7 +24,7 @@ test("agent library catalog contains only explicit top-level callable exports", 
   ]);
   expect(modules.find((module) => module.module === "ue/aim")?.functions.map((fn) => fn.name)).toContain("createUeAimAssist");
   expect(modules.find((module) => module.module === "ue/esp")?.functions.map((fn) => fn.name)).toContain("createEsp");
-  expect(modules.find((module) => module.module === "ue/movement")?.functions.map((fn) => fn.name)).toContain("createMovementTrainer");
+  expect(modules.find((module) => module.module === "ue/movement")?.functions.map((fn) => fn.name)).toContain("createMovementInstrument");
 });
 
 test("catalog signatures and docs come from the owning source declaration", () => {

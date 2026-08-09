@@ -48,7 +48,7 @@ clear success path require the owner to unlock the phone and open those scenes.
 
 ## Interface and agent verification
 
-The live TUI journey was exercised as `1 Connect → 2 Mods → 3 Inspect`, including
+The live TUI journey was exercised as `1 Connect → 2 Analyze → 3 Instrument`, including
 typed boolean input, action execution, verification receipt, reset receipt,
 help, the advanced-tool palette, and an 80×24 compact terminal. Human REPLs
 stayed alive for all three targets and Tab completed RPC names. One persistent
@@ -58,7 +58,7 @@ back to saved bundle-id targets, so selecting `Block Blast!` or `냥코 대전�
 from Connect opens the game-specific target instead of a generic probe.
 The complete first-run path was repeated after this fix: `Ctrl+V` selected the
 phone, Connect listed all three games with saved-target diamonds, Block Blast
-opened a short review screen, the next Enter attached PID 11539, and Mods showed
+opened a short review screen, the next Enter attached PID 11539, and Instrument showed
 the descriptor-driven game actions; `Ctrl+Q` then closed the session cleanly.
 
 All selectors use the same core path:

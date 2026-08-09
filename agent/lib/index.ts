@@ -19,6 +19,7 @@ export * as sym from "./sym.js";
 export * as objc from "./objc.js";
 export * as java from "./java.js";
 export * as excrash from "./excrash.js";
+export * as recording from "./recording.js";
 export { log, ok, warn, err } from "./log.js";
 export { modules, exports, imports, symbols } from "./search.js";
 export {

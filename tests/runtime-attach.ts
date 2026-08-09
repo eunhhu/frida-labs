@@ -1,9 +1,10 @@
 // Opt-in real Frida integration test. It compiles and owns a tiny native
 // process, then exercises the same SessionEngine + ActionService path as TUI.
 
-import { mkdirSync } from "node:fs";
+import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { ActionService, startLaunch, type ActionMode, type ActionReceipt, type GameSession } from "../src/core/index.js";
+import { compileNativeFixture } from "./fixture-compiler.js";
 
 interface FixtureInfo {
   pid: number;
@@ -82,15 +83,9 @@ function instrumentId(receipt: ActionReceipt): string {
 async function main(): Promise<void> {
   const root = process.cwd();
   const artifacts = join(root, "artifacts");
-  const executable = join(artifacts, "flab-runtime-target");
+  const executable = join(artifacts, process.platform === "win32" ? "flab-runtime-target.exe" : "flab-runtime-target");
   mkdirSync(artifacts, { recursive: true });
-
-  const compiler = Bun.spawn([
-    "cc", "-O0", "-g", "-Wall", "-Wextra", "-Werror",
-    join(root, "tests/fixtures/runtime_target.c"), "-o", executable,
-  ], { cwd: root, stdout: "pipe", stderr: "pipe" });
-  const compileExit = await compiler.exited;
-  if (compileExit !== 0) throw new Error(`fixture compile failed: ${await new Response(compiler.stderr).text()}`);
+  await compileNativeFixture(root, "tests/fixtures/runtime_target.c", executable);
 
   const fixture = Bun.spawn([executable], { cwd: root, stdout: "pipe", stderr: "pipe" });
   let session: GameSession | null = null;
@@ -150,7 +145,7 @@ async function main(): Promise<void> {
     ]);
     if (watchStart.status === "passed") {
       const watchId = instrumentId(watchStart);
-      await Bun.sleep(350);
+      await Bun.sleep(process.platform === "win32" ? 1_500 : 350);
       const watchStatus = await invoke("analysis", "instrumentStatus", [watchId]);
       watchOutcome = watchStatus.verification?.verified ? "verified" : "unverified";
       check((await invoke("instrument", "instrumentStop", [watchId])).status === "passed", "watch stop failed");
@@ -230,6 +225,134 @@ async function main(): Promise<void> {
     machine.stdin.end();
     check(await machine.exited === 0, `machine session exited nonzero: ${await machineStderr}`);
 
+    // Exercise the global authoring/control transport against the same owned
+    // fixture. This proves flab.control.v1 can open and drive a live session;
+    // unit tests cover its workspace mutation and packaging services.
+    const control = Bun.spawn(
+      ["bun", "src/bin.ts", "agent", "--json"],
+      { cwd: root, stdin: "pipe", stdout: "pipe", stderr: "pipe" },
+    );
+    const controlReader = new LineReader(control.stdout);
+    const controlStderr = new Response(control.stderr).text();
+    const controlSend = async (request: Record<string, unknown>): Promise<Record<string, unknown>> => {
+      control.stdin.write(`${JSON.stringify(request)}\n`);
+      await control.stdin.flush();
+      for (;;) {
+        const envelope = await nextJson(controlReader);
+        if (envelope.type === "response" && envelope.id === request.id) return envelope;
+        check(envelope.type === "event", `unexpected control envelope: ${JSON.stringify(envelope)}`);
+      }
+    };
+    const controlReady = await nextJson(controlReader);
+    check(controlReady.type === "ready" && controlReady.protocol === "flab.control.v1", "control ready envelope invalid");
+    check((await controlSend({
+      id: "authorize",
+      op: "authorize",
+      profile: {
+        purpose: "qa",
+        objective: "Exercise the global Agent Control API against the owned native fixture",
+        environment: "owned-offline",
+        ownership: { clientOwned: true, operatorApproved: true },
+        isolation: {
+          publicMatchmaking: false,
+          publicLeaderboard: false,
+          productionEconomy: false,
+          thirdPartyAccounts: false,
+        },
+        antiCheat: "absent",
+      },
+    })).ok === true, "control authorization failed");
+    check((await controlSend({ id: "verify", op: "verify.static" })).ok === true, "control static verification failed");
+    const controlOpen = await controlSend({
+      id: "open",
+      op: "session.open",
+      launch: { kind: "probe-attach-pid", pid: info.pid, display: "flab-runtime-target", device: { kind: "local" } },
+    });
+    const controlOpenResult = controlOpen.result as { pid?: unknown; device?: { id?: unknown } } | undefined;
+    check(
+      controlOpen.ok === true && controlOpenResult?.pid === info.pid && controlOpenResult.device?.id === "local",
+      `control live open failed: ${JSON.stringify(controlOpen)}`,
+    );
+    check((await controlSend({ id: "analyze", op: "session.action", mode: "analysis", action: "modules", args: ["flab-runtime"] })).ok === true, "control analysis failed");
+    const controlRecordStart = await controlSend({
+      id: "record-start",
+      op: "record.start",
+      label: "runtime fixture human-play loop",
+      probes: [{ id: "tick", name: "flab_tick", address: info.tick, args: 1, captureReturn: true }],
+      options: { maxEvents: 1_000, perProbeLimit: 500, sampleEvery: 1, maxDurationMs: 30_000 },
+    });
+    const controlRecordMetadata = controlRecordStart.result as { id?: unknown } | undefined;
+    const controlRecordId = controlRecordMetadata?.id;
+    check(controlRecordStart.ok === true && typeof controlRecordId === "string", `control Record start failed: ${JSON.stringify(controlRecordStart)}`);
+    await Bun.sleep(40);
+    const controlRecordStatus = await controlSend({ id: "record-status", op: "record.status" });
+    const controlRecordStatusValue = controlRecordStatus.result as { record?: { eventCount?: unknown }; agent?: { emitted?: unknown } } | undefined;
+    check(
+      controlRecordStatus.ok === true && typeof controlRecordStatusValue?.record?.eventCount === "number" &&
+      controlRecordStatusValue.record.eventCount > 0 && typeof controlRecordStatusValue.agent?.emitted === "number" &&
+      controlRecordStatusValue.agent.emitted > 0,
+      `control Record captured no calls: ${JSON.stringify(controlRecordStatus)}`,
+    );
+    const controlRecordStop = await controlSend({ id: "record-stop", op: "record.stop" });
+    check(controlRecordStop.ok === true, `control Record stop failed: ${JSON.stringify(controlRecordStop)}`);
+    const controlRecordSummary = await controlSend({ id: "record-summary", op: "record.summary", recordId: controlRecordId });
+    const controlRecordSummaryValue = controlRecordSummary.result as { functions?: Array<{ probeId?: unknown; enters?: unknown; leaves?: unknown }> } | undefined;
+    const tickSummary = controlRecordSummaryValue?.functions?.find((entry) => entry.probeId === "tick");
+    check(
+      controlRecordSummary.ok === true && typeof tickSummary?.enters === "number" && tickSummary.enters > 0 &&
+      typeof tickSummary.leaves === "number" && tickSummary.leaves > 0,
+      `control Record summary invalid: ${JSON.stringify(controlRecordSummary)}`,
+    );
+    const controlRecordRead = await controlSend({ id: "record-read", op: "record.read", recordId: controlRecordId, cursor: 0, limit: 3 });
+    const controlRecordReadValue = controlRecordRead.result as { events?: unknown[] } | undefined;
+    check(controlRecordRead.ok === true && (controlRecordReadValue?.events?.length ?? 0) > 0, "control Record paging failed");
+
+    const limitedRecordStart = await controlSend({
+      id: "record-limit-start",
+      op: "record.start",
+      label: "runtime fixture automatic event limit",
+      probes: [{ id: "tick-limit", name: "flab_tick", address: info.tick, args: 1, captureReturn: true }],
+      options: { maxEvents: 4, perProbeLimit: 100, sampleEvery: 1, maxDurationMs: 30_000 },
+    });
+    const limitedRecordId = (limitedRecordStart.result as { id?: unknown } | undefined)?.id;
+    check(limitedRecordStart.ok === true && typeof limitedRecordId === "string", `limited Record start failed: ${JSON.stringify(limitedRecordStart)}`);
+    let limitedCompleted: { id?: unknown; status?: unknown; reason?: unknown; eventCount?: unknown } | null = null;
+    for (let attempt = 0; attempt < 100 && !limitedCompleted; attempt++) {
+      const status = await controlSend({ id: `record-limit-status-${attempt}`, op: "record.status" });
+      const completed = (status.result as { completed?: typeof limitedCompleted } | undefined)?.completed;
+      if (completed?.id === limitedRecordId) limitedCompleted = completed;
+      else await Bun.sleep(10);
+    }
+    check(
+      limitedCompleted?.status === "completed" && limitedCompleted.reason === "event-limit" && limitedCompleted.eventCount === 4,
+      `Record event limit did not finalize cleanly: ${JSON.stringify(limitedCompleted)}`,
+    );
+    const controlStart = await controlSend({
+      id: "trace",
+      op: "session.action",
+      mode: "instrument",
+      action: "instrumentStart",
+      args: ["trace", info.tick, JSON.stringify({ label: "control tick", args: 0 })],
+    });
+    const controlStartReceipt = controlStart.result as { result?: { summary?: string } } | undefined;
+    const controlStartValue = JSON.parse(controlStartReceipt?.result?.summary ?? "null") as { instrument?: { id?: string } };
+    const controlInstrumentId = controlStartValue.instrument?.id;
+    check(controlStart.ok === true && typeof controlInstrumentId === "string", "control trace start failed");
+    await Bun.sleep(40);
+    const controlStatus = await controlSend({ id: "status", op: "session.action", mode: "analysis", action: "instrumentStatus", args: [controlInstrumentId] });
+    const controlStatusReceipt = controlStatus.result as { verification?: { verified?: boolean; fired?: number } } | undefined;
+    check(controlStatus.ok === true && controlStatusReceipt?.verification?.verified === true && (controlStatusReceipt.verification.fired ?? 0) > 0, "control trace did not verify");
+    check((await controlSend({ id: "stop", op: "session.action", mode: "instrument", action: "instrumentStop", args: [controlInstrumentId] })).ok === true, "control stop failed");
+    check((await controlSend({ id: "delete", op: "session.action", mode: "instrument", action: "instrumentDelete", args: [controlInstrumentId] })).ok === true, "control delete failed");
+    check((await controlSend({ id: "session-close", op: "session.close" })).ok === true, "control session close failed");
+    check((await controlSend({ id: "close", op: "close" })).ok === true, "control close failed");
+    control.stdin.end();
+    check(await control.exited === 0, `control session exited nonzero: ${await controlStderr}`);
+    rmSync(join(root, "artifacts", "records", `${controlRecordId}.json`), { force: true });
+    rmSync(join(root, "artifacts", "records", `${controlRecordId}.jsonl`), { force: true });
+    rmSync(join(root, "artifacts", "records", `${limitedRecordId}.json`), { force: true });
+    rmSync(join(root, "artifacts", "records", `${limitedRecordId}.jsonl`), { force: true });
+
     console.log(JSON.stringify({
       ok: true,
       pid: info.pid,
@@ -239,6 +362,9 @@ async function main(): Promise<void> {
         "freeze-create", "freeze-write", "freeze-update", "freeze-stop", "freeze-delete",
         "invalid-config-rejected", "detach-cleanup", "reattach",
         "machine-ready", "machine-analysis", "machine-create", "machine-status", "machine-update", "machine-stop", "machine-delete", "machine-close",
+        "control-ready", "control-authorize", "control-verify", "control-open", "control-analysis",
+        "record-start", "record-live-events", "record-stop", "record-summary", "record-page", "record-event-limit",
+        "control-create", "control-status", "control-stop", "control-delete", "control-session-close", "control-close",
       ],
       logLines: logs.length,
       watch: watchOutcome,

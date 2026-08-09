@@ -8,6 +8,7 @@ import { ActivityWindowController } from "../../lib/android-activity.js";
 import { FrameMeter } from "../../lib/frame-meter.js";
 import { api, perform as javaPerform } from "../../lib/java.js";
 import { ok } from "../../lib/log.js";
+import { recordingDescriptors, recordingRpcSurface } from "../../lib/recording.js";
 
 const ACTIVITY = "org.cocos2dx.javascript.AppActivity";
 const JS_BRIDGE = "org.cocos2dx.javascript.JsCallJava";
@@ -374,6 +375,7 @@ async function resetAll(): Promise<unknown> {
 }
 
 const surface = {
+  ...recordingRpcSurface(),
   modInfo(): unknown {
     return {
       game: "Block Blast!",
@@ -440,6 +442,7 @@ const surface = {
       { name: "performanceStop", label: "Stop FPS meter", category: "QoL", doc: "Detach the owned EGL listener", capabilities: ["instrument"], effect: "control", returns: "verification", statusAction: "performanceStatus" },
       { name: "resetAll", label: "Reset every reversible change", category: "Start here", doc: "Restore score/chapter values, survival traits, Activity flags, and listeners", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
       { name: "dispose", label: "Dispose safely", category: "Debug", doc: "Cleanup alias used before reload or detach", capabilities: ["instrument", "debug"], effect: "control", returns: "json" },
+      ...recordingDescriptors(),
       { name: "__describe", doc: "This descriptor" },
     ];
   },

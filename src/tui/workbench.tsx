@@ -18,6 +18,12 @@ import {
   type LaunchRequest,
   type ProcessCandidate,
   type RpcDescriptor,
+  RecordingCoordinator,
+  type AnalysisRecordMetadata,
+  type AnalysisRecordOptions,
+  type AnalysisRecordProbe,
+  type AnalysisRecordSummary,
+  type RecordPlanResult,
 } from "../core/index.js";
 import { store, MAX_SESSIONS, type SessionState } from "./store.js";
 
@@ -32,6 +38,7 @@ class Workbench {
   /** Ids whose close was requested while a launch was still in flight — the
    *  late session is torn down instead of being installed (closed->live fix). */
   private closeRequested = new Set<number>();
+  private recordings = new Map<number, RecordingCoordinator>();
 
   handle(id: number | null): GameSession | null {
     return id === null ? null : (this.handles.get(id) ?? null);
@@ -95,6 +102,54 @@ class Workbench {
       });
     }
     return receipt;
+  }
+
+  private recording(id: number): RecordingCoordinator {
+    const current = this.recordings.get(id);
+    if (current) return current;
+    const created = new RecordingCoordinator();
+    this.recordings.set(id, created);
+    return created;
+  }
+
+  async planRecord(id: number, query: string, module?: string, limit = 24): Promise<RecordPlanResult> {
+    const session = this.handle(id);
+    if (!session) throw new Error("session is not live");
+    return this.recording(id).plan(session, query, module, limit);
+  }
+
+  async startRecord(
+    id: number,
+    label: string,
+    probes: AnalysisRecordProbe[],
+    options?: AnalysisRecordOptions,
+  ): Promise<AnalysisRecordMetadata> {
+    const session = this.handle(id);
+    if (!session) throw new Error("session is not live");
+    return this.recording(id).start(
+      session,
+      { target: session.target, process: session.process, pid: session.pid, device: session.device },
+      label,
+      probes,
+      options,
+    );
+  }
+
+  async recordStatus(id: number): Promise<{ record: AnalysisRecordMetadata | null; agent: unknown; completed: AnalysisRecordMetadata | null }> {
+    const recording = this.recordings.get(id);
+    return recording ? recording.status() : { record: null, agent: null, completed: null };
+  }
+
+  async stopRecord(id: number): Promise<AnalysisRecordMetadata | null> {
+    return this.recordings.get(id)?.stop("requested") ?? null;
+  }
+
+  recordList(id: number): AnalysisRecordMetadata[] {
+    return this.recording(id).store.list();
+  }
+
+  async recordSummary(id: number, recordId: string): Promise<AnalysisRecordSummary> {
+    return this.recording(id).store.summary(recordId);
   }
 
   /** Compatibility wrapper for the original registered-target attach surface. */
@@ -188,6 +243,10 @@ class Workbench {
               this.recordDebug(id, { kind: "agent-exception", summary: "Agent exception", detail });
             },
             onEvent: (payload) => {
+              if (payload.type === "flab.record.event" || payload.type === "flab.record.state") {
+                this.recordings.get(id)?.capture(payload);
+                if (payload.type === "flab.record.event") return;
+              }
               store.pushEvent(id, payload);
               if (payload.type === "crash") {
                 this.recordDebug(id, {
@@ -294,12 +353,17 @@ class Workbench {
     this.handles.delete(id);
     this.requests.delete(id);
     this.actionChains.delete(id);
+    this.recordings.delete(id);
     this.actions.removeSession(id);
   }
 
   private async teardownHandle(id: number): Promise<void> {
     const h = this.handles.get(id);
     this.handles.delete(id);
+    const recording = this.recordings.get(id);
+    if (recording) {
+      try { await recording.stop("session-close"); } catch { /* metadata remains interrupted */ }
+    }
     if (h) {
       try { await h.close(); } catch { /* detach errors are not actionable here */ }
     }
@@ -356,7 +420,7 @@ export function Sidebar(props: {
 }): React.JSX.Element {
   const windowSize = useWindowSize();
   const minimal = Boolean(props.expanded && windowSize.rows < 28);
-  const listSize = minimal ? 2 : 6;
+  const listSize = minimal ? 2 : 3;
   const selectedProcess = props.processes[props.processIndex];
   const matchedTarget = selectedProcess?.matchedTargets[0];
   const multipleMatches = (selectedProcess?.matchedTargets.length ?? 0) > 1;
@@ -378,7 +442,7 @@ export function Sidebar(props: {
         <>
           {!minimal && <Text> </Text>}
           <Text bold underline>connections ({props.sessions.length}/{MAX_SESSIONS})</Text>
-          {props.sessions.map((s) => (
+          {windowAround(props.sessions, Math.max(0, props.sessions.findIndex((session) => session.id === props.activeId)), 3).map(({ item: s }) => (
             <Text key={s.id} color={s.id === props.activeId ? statusTint[s.status] : "gray"}>
               {s.id === props.activeId ? "● " : "○ "}#{s.id} {clip(s.target, 14)} <Text dimColor>{s.status}</Text>
             </Text>
@@ -389,7 +453,7 @@ export function Sidebar(props: {
       {showConnectLists && (
         <>
           {!minimal && <Text> </Text>}
-          <Text bold underline>running apps · {props.processTotal} found</Text>
+          {props.focus !== "targets" && <><Text bold underline>running apps · {props.processTotal} found</Text>
           {(props.processFilterActive || props.processQuery) && (
             <Text color={props.processFilterActive ? "yellow" : "gray"}>
               search: {props.processQuery || "type game name"}{props.processFilterActive ? "_" : ""}
@@ -417,8 +481,8 @@ export function Sidebar(props: {
               : props.processFilterActive ? "Esc shows every process" : "/ starts search"}
           </Text>
           <Text dimColor>{selectedProcess ? "Enter connect · n save · r refresh" : "Tab saved games · r refresh"}</Text>
-          {!minimal && <Text> </Text>}
-          <Text bold underline>saved games · {props.targets.length} found</Text>
+          </>}
+          {props.focus === "targets" && <><Text bold underline>saved games · {props.targets.length} found</Text>
           {props.targets.length === 0 && <Text color="yellow">none yet — n creates one</Text>}
           {windowAround(props.targets, props.pickerIndex, listSize).map(({ item: t, index: i }) => (
             <Text key={t} color={props.focus === "targets" && i === props.pickerIndex ? "green" : undefined}>
@@ -426,6 +490,7 @@ export function Sidebar(props: {
             </Text>
           ))}
           <Text dimColor>Tab switch list · Enter connect · m manage</Text>
+          </>}
         </>
       )}
     </Box>
@@ -458,9 +523,9 @@ export function StatusHeader(props: { session: SessionState | null; deviceLabel:
         <Text dimColor>
           {s
             ? s.status === "live"
-              ? "2 Mods · 3 Inspect · Ctrl+D change game · ? help"
+              ? "2 Analyze · 3 Instrument · Ctrl+P switch"
               : s.detail
-            : "Type game name · ↑/↓ choose · Enter connect · Ctrl+V device"}
+            : "Type game name · ↑/↓ choose · Enter connect"}
         </Text>
       </Box>
     );
@@ -480,8 +545,8 @@ export function StatusHeader(props: { session: SessionState | null; deviceLabel:
       </Box>
       <Text dimColor>
         {s
-          ? "Next: press 2 for Mods · press 3 for Inspect · Ctrl+P all tools · ? help"
-          : "Type to search · ↑/↓ choose · Enter connect · Ctrl+V device · ? help"}
+          ? "2 Analyze · 3 Instrument · Ctrl+P switch"
+          : "Type to search · ↑/↓ choose · Enter connect"}
       </Text>
       {s && s.detail && (
         <Text color={s.status === "error" ? "red" : s.status === "connecting" ? "yellow" : "gray"}>

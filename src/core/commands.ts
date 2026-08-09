@@ -5,6 +5,14 @@ import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { inspect } from "node:util";
 import { AGENT_OUT, compileAgent } from "./compile.js";
+import {
+  CONTROL_PROTOCOL,
+  createControlService,
+  controlReady,
+  parseControlRequestLine,
+  type ControlEvent,
+  type ControlResponse,
+} from "./control.js";
 import { depcheck } from "./depcheck.js";
 import { libReference, renderLibText } from "./libref.js";
 import { loadManifest, repoRoot, type TargetConfig } from "./manifest.js";
@@ -40,6 +48,9 @@ import {
 } from "./protocol.js";
 import { scaffold } from "./scaffold.js";
 import { evalOnce, startSession, type RpcDescriptor, type SessionOptions } from "./session.js";
+import { buildInstrumentPackage } from "./packages.js";
+import { detectAcpAgents, runAcpGateway, selectAcpAgent } from "./acp.js";
+import { runFlabMcpStdio } from "./mcp.js";
 
 export interface CmdCtx {
   json: boolean;
@@ -258,6 +269,44 @@ async function startMachineSession(options: SessionOptions, ctx: CmdCtx): Promis
   return detachedReason === null ? 0 : 1;
 }
 
+async function startControlSession(ctx: CmdCtx): Promise<number> {
+  let input: ReturnType<typeof createInterface> | null = null;
+  let closing = false;
+  const emit = (event: ControlEvent): void => {
+    if (event.event === "session.log" || event.event === "session.error") ctx.err(event.message);
+    else json(ctx, event);
+  };
+  const control = createControlService({ onEvent: emit });
+  json(ctx, controlReady());
+  input = createInterface({ input: process.stdin, terminal: false });
+  try {
+    for await (const line of input) {
+      if (!line.trim()) continue;
+      const parsed = parseControlRequestLine(line);
+      if (!parsed.ok) {
+        const response: ControlResponse = {
+          type: "response",
+          id: parsed.id,
+          ok: false,
+          error: { code: parsed.code, message: parsed.message },
+        };
+        json(ctx, response);
+        continue;
+      }
+      const response = await control.handle(parsed.request);
+      json(ctx, response);
+      if (parsed.request.op === "close" && response.ok) {
+        closing = true;
+        break;
+      }
+    }
+  } finally {
+    input.close();
+    if (!closing) await control.close();
+  }
+  return 0;
+}
+
 
 async function runProjectOperation(
   operation: string,
@@ -372,6 +421,57 @@ async function runProjectOperation(
 }
 
 export const commands: Command[] = [
+  {
+    name: "acp",
+    usage: "flab acp [detect --json | --upstream ID|JSON_COMMAND]",
+    summary: "Bridge any installed ACP coding agent to flab tools.",
+    allowedFlags: ["json", "upstream"],
+    detail: "Auto-detects codex-acp, claude-agent-acp, opencode acp, or gemini --acp. The gateway injects flab MCP into every ACP session.",
+    async run(args, flags, ctx) {
+      if (args[0] === "detect") {
+        if (args.length !== 1 || flags.upstream !== undefined) return commandFailure(ctx, "usage: flab acp detect --json", 2);
+        const agents = detectAcpAgents();
+        const result = {
+          gateway: "flab.acp.v1",
+          detected: agents.filter((agent) => agent.detected),
+          candidates: agents,
+          selection: "zero/one installed agent is automatic; multiple agents require --upstream <id>",
+        };
+        if (ctx.json) json(ctx, result);
+        else {
+          for (const agent of agents) ctx.out(`${agent.detected ? "✓" : "·"} ${agent.id.padEnd(18)} ${agent.label}${agent.executable ? ` · ${agent.executable}` : ""}`);
+        }
+        return 0;
+      }
+      if (args.length) return commandFailure(ctx, "usage: flab acp [detect --json | --upstream ID|JSON_COMMAND]", 2);
+      if (ctx.json) return commandFailure(ctx, "--json is only valid with flab acp detect; ACP runtime already uses JSON-RPC", 2);
+      const selector = typeof flags.upstream === "string" ? flags.upstream : undefined;
+      return runAcpGateway({ upstream: selectAcpAgent(selector) });
+    },
+  },
+  {
+    name: "mcp",
+    usage: "flab mcp",
+    summary: "Serve flab Control tools to any MCP-capable agent.",
+    allowedFlags: [],
+    detail: "Local stdio server. Normally injected automatically by flab acp; stdout is reserved for MCP JSON-RPC.",
+    async run(args, flags, ctx) {
+      if (args.length || Object.keys(flags).length || ctx.json) return commandFailure(ctx, "usage: flab mcp", 2);
+      return runFlabMcpStdio();
+    },
+  },
+  {
+    name: "agent",
+    usage: "flab agent --json",
+    summary: "Open the global Agent Control API for analysis, Instrument authoring, live actions, verification, and packaging.",
+    allowedFlags: ["json"],
+    detail: `Persistent NDJSON protocol ${CONTROL_PROTOCOL}. Authorize an owned offline or isolated private-lab task before device, mutation, or live operations.`,
+    async run(args, _flags, ctx) {
+      if (args.length) return commandFailure(ctx, "usage: flab agent --json", 2);
+      if (!ctx.json) return commandFailure(ctx, "flab agent requires --json", 2);
+      return startControlSession(ctx);
+    },
+  },
   {
     name: "devices",
     usage: "flab devices [--device local|usb|remote|ID | --host HOST] [--device-timeout MS] [--json]",
@@ -505,6 +605,29 @@ export const commands: Command[] = [
     },
   },
   {
+    name: "package",
+    usage: "flab package <instrument> [--out file] [--json]",
+    summary: "Build a portable, checksummed Instrument artifact for distribution.",
+    allowedFlags: ["json", "out"],
+    async run(args, flags, ctx) {
+      const instrument = args[0];
+      if (!instrument || args.length !== 1) return commandFailure(ctx, "usage: flab package <instrument> [--out file]", 2);
+      const result = await buildInstrumentPackage(instrument, {
+        ...(typeof flags.out === "string" ? { out: flags.out } : {}),
+      });
+      const summary = {
+        instrument,
+        path: result.path,
+        bytes: result.bytes,
+        sha256: result.sha256,
+        integrity: result.artifact.integrity,
+      };
+      if (ctx.json) json(ctx, summary);
+      else ctx.out(`[+] packaged ${instrument} → ${result.path} (${result.bytes} bytes, sha256 ${result.sha256})`);
+      return 0;
+    },
+  },
+  {
     name: "run",
     usage: "flab run <target> [--device DEVICE | --host HOST] [--proc P] [--spawn] [--eval \"code\" | --session --json] [--no-watch]",
     summary: "Compile, attach, inject, then REPL or run a one-shot evaluation.",
@@ -592,7 +715,7 @@ export const commands: Command[] = [
   {
     name: "capabilities",
     usage: "flab capabilities [--json]",
-    summary: "Describe the stable AI-agent protocol and managed instrument lifecycle.",
+    summary: "Describe the global Agent API, selected-session protocol, and managed Instrument lifecycle.",
     allowedFlags: ["json"],
     async run(args, _flags, ctx) {
       if (args.length) return commandFailure(ctx, "usage: flab capabilities", 2);
@@ -681,17 +804,18 @@ export function renderHelp(): string {
     lines.push("");
   };
   const lines = [
-    "flab — connect, inspect, and mod an authorized offline/single-player game",
+    "flab — connect, analyze, and build Instruments for an authorized game",
     "",
     "start here:",
-    "  flab                  open the guided Connect → Mods → Inspect TUI",
+    "  flab                  open the guided Connect → Analyze → Instrument TUI",
     "  flab doctor           verify Frida and the selected device",
     "  flab --help           show this page",
     "",
   ];
-  group("connect and use:", ["devices", "processes", "run", "probe"], lines);
-  group("saved games:", ["targets", "new", "target", "build"], lines);
-  group("agent and developer tools:", ["capabilities", "lib", "depcheck", "doctor"], lines);
+  group("connect and use:", ["devices", "processes", "run"], lines);
+  group("saved Instruments:", ["targets", "build", "package"], lines);
+  group("agent interfaces:", ["acp", "mcp", "agent"], lines);
+  group("developer tools:", ["capabilities", "lib", "doctor"], lines);
   lines.push("details:");
   lines.push("  flab <command> --help  command usage and options");
   lines.push("  flab tui [target]      open the TUI; optionally connect a saved game");

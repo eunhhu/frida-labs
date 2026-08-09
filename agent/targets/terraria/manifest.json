@@ -1,150 +1,150 @@
 {
-  "compatibility" : {
-    "osIDs" : [
-      "macos"
+  "compatibility": {
+    "osIDs": [
+      "macos",
+      "windows"
     ],
-    "platforms" : [
-      "darwin"
+    "platforms": [
+      "darwin",
+      "win32"
     ]
   },
-  "entrypoint" : "main.ts",
-  "features" : [
+  "entrypoint": "main.ts",
+  "features": [
     {
-      "enabledByDefault" : true,
-      "id" : "god",
-      "name" : "God Mode (Infinite HP)",
-      "optional" : false,
-      "schema" : {
-        "default" : true,
-        "kind" : "boolean"
+      "enabledByDefault": false,
+      "id": "god",
+      "name": "God Mode (Infinite HP)",
+      "optional": false,
+      "schema": {
+        "default": false,
+        "kind": "boolean"
       }
     },
     {
-      "enabledByDefault" : true,
-      "id" : "mana",
-      "name" : "Infinite Mana",
-      "optional" : false,
-      "schema" : {
-        "default" : true,
-        "kind" : "boolean"
+      "enabledByDefault": false,
+      "id": "mana",
+      "name": "Infinite Mana",
+      "optional": false,
+      "schema": {
+        "default": false,
+        "kind": "boolean"
       }
     },
     {
-      "enabledByDefault" : true,
-      "id" : "breath",
-      "name" : "Infinite Breath",
-      "optional" : false,
-      "schema" : {
-        "default" : true,
-        "kind" : "boolean"
+      "enabledByDefault": false,
+      "id": "breath",
+      "name": "Infinite Breath",
+      "optional": false,
+      "schema": {
+        "default": false,
+        "kind": "boolean"
       }
     },
     {
-      "enabledByDefault" : true,
-      "id" : "nokb",
-      "name" : "No Knockback",
-      "optional" : false,
-      "schema" : {
-        "default" : true,
-        "kind" : "boolean"
+      "enabledByDefault": false,
+      "id": "nokb",
+      "name": "No Knockback",
+      "optional": false,
+      "schema": {
+        "default": false,
+        "kind": "boolean"
       }
     },
     {
-      "enabledByDefault" : true,
-      "id" : "fly",
-      "name" : "Infinite Flight",
-      "optional" : false,
-      "schema" : {
-        "default" : true,
-        "kind" : "boolean"
+      "enabledByDefault": false,
+      "id": "fly",
+      "name": "Infinite Flight",
+      "optional": false,
+      "schema": {
+        "default": false,
+        "kind": "boolean"
       }
     },
     {
-      "enabledByDefault" : true,
-      "id" : "env",
-      "name" : "Environmental Immunity",
-      "optional" : false,
-      "schema" : {
-        "default" : true,
-        "kind" : "boolean"
+      "enabledByDefault": false,
+      "id": "env",
+      "name": "Environmental Immunity",
+      "optional": false,
+      "schema": {
+        "default": false,
+        "kind": "boolean"
       }
     },
     {
-      "enabledByDefault" : true,
-      "id" : "maxsummon",
-      "name" : "Max Summons (99 slots)",
-      "optional" : false,
-      "schema" : {
-        "default" : true,
-        "kind" : "boolean"
+      "enabledByDefault": false,
+      "id": "maxsummon",
+      "name": "Max Summons (99 slots)",
+      "optional": false,
+      "schema": {
+        "default": false,
+        "kind": "boolean"
       }
     },
     {
-      "enabledByDefault" : true,
-      "id" : "fastuse",
-      "name" : "Instant Item Use (no cooldown)",
-      "optional" : false,
-      "schema" : {
-        "default" : true,
-        "kind" : "boolean"
+      "enabledByDefault": false,
+      "id": "fastuse",
+      "name": "Instant Item Use (no cooldown)",
+      "optional": false,
+      "schema": {
+        "default": false,
+        "kind": "boolean"
       }
     },
     {
-      "enabledByDefault" : true,
-      "id" : "maptp",
-      "name" : "Map Right-Click Teleport",
-      "optional" : false,
-      "schema" : {
-        "default" : true,
-        "kind" : "boolean"
+      "enabledByDefault": false,
+      "id": "maptp",
+      "name": "Map Right-Click Teleport (Mono only)",
+      "optional": true,
+      "schema": {
+        "default": false,
+        "kind": "boolean"
       }
     }
   ],
-  "icon" : {
-    "kind" : "symbolic",
-    "value" : "wand-stars"
+  "icon": {
+    "kind": "symbolic",
+    "value": "wand-stars"
   },
-  "name" : "Terraria Trainer",
-  "widgets" : [
+  "name": "Terraria Instrument",
+  "widgets": [
     {
-      "id" : "stats",
-      "kind" : {
-        "config" : {
-          "actions" : [
-
-          ],
-          "columns" : [
+      "id": "stats",
+      "kind": {
+        "config": {
+          "actions": [],
+          "columns": [
             {
-              "alignment" : "leading",
-              "id" : "k",
-              "name" : "Stat"
+              "alignment": "leading",
+              "id": "k",
+              "name": "Stat"
             },
             {
-              "alignment" : "trailing",
-              "id" : "v",
-              "name" : "Value"
+              "alignment": "trailing",
+              "id": "v",
+              "name": "Value"
             }
           ],
-          "maxRows" : 1000
+          "maxRows": 1000
         },
-        "kind" : "table"
+        "kind": "table"
       },
-      "name" : "Live Stats",
-      "persistence" : "none"
+      "name": "Live Stats",
+      "persistence": "none"
     },
     {
-      "id" : "console",
-      "kind" : {
-        "config" : {
-          "maxEntries" : 1000,
-          "placeholder" : "give <type> [stack] [prefix] | dupe <slot> [count] | tp <x> <y> | tpc | summon <n> | mapreveal | heal | time | \/god | help",
-          "prompt" : "›",
-          "runButtonLabel" : "Run"
+      "id": "console",
+      "kind": {
+        "config": {
+          "maxEntries": 1000,
+          "placeholder": "give <type> [stack] [prefix] | clear <slot> | dupe <slot> [count] | tp <x> <y> | summon <n> | heal | time | help",
+          "prompt": "›",
+          "runButtonLabel": "Run"
         },
-        "kind" : "console"
+        "kind": "console"
       },
-      "name" : "Trainer Console",
-      "persistence" : "none"
+      "name": "Instrument Console",
+      "persistence": "none"
     }
   ]
 }

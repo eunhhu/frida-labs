@@ -114,6 +114,13 @@ export async function handleMachineRequest(
 export function machineCapabilities(): Record<string, unknown> {
   return {
     protocol: MACHINE_PROTOCOL,
+    globalControl: {
+      protocol: "flab.control.v1",
+      start: "flab agent --json",
+      acp: "flab acp (auto-detected upstream + injected MCP)",
+      mcp: "flab mcp (direct two-tool stdio server)",
+      scope: "authorize, connect, Record-assisted analysis, author/link Instrument source, build, verify, live actions, cleanup, package",
+    },
     transport: "newline-delimited JSON on stdin/stdout; diagnostics on stderr",
     launch: [
       "flab probe --pid <pid> --session --json",
@@ -144,6 +151,11 @@ export function machineCapabilities(): Record<string, unknown> {
         watch: { type: "u32", label: "watch" },
         freeze: { type: "u32", value: 100, intervalMs: 10, label: "freeze" },
       },
+    },
+    analysisRecord: {
+      flow: ["record.plan", "record.start", "human plays one scenario", "record.stop", "record.summary", "record.read"],
+      persistence: "artifacts/records/<record-id>.json + .jsonl",
+      limits: "bounded probes, events, duration, storage, pages, and summary",
     },
   };
 }

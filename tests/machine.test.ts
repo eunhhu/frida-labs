@@ -69,6 +69,11 @@ test("machine actions use the same live authorization and normalized receipts as
 test("machine capabilities expose the complete managed lifecycle", () => {
   expect(machineCapabilities()).toMatchObject({
     protocol: "flab.ndjson.v1",
+    globalControl: {
+      acp: expect.stringContaining("flab acp"),
+      mcp: expect.stringContaining("flab mcp"),
+      scope: expect.stringContaining("Record-assisted"),
+    },
     instrumentLifecycle: {
       create: expect.stringContaining("instrumentStart"),
       inspect: expect.stringContaining("instrumentStatus"),
@@ -76,5 +81,6 @@ test("machine capabilities expose the complete managed lifecycle", () => {
       stop: expect.stringContaining("instrumentStopAll"),
       delete: expect.stringContaining("instrumentDelete"),
     },
+    analysisRecord: { flow: expect.arrayContaining(["record.plan", "record.summary"]) },
   });
 });

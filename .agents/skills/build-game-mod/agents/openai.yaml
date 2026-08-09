@@ -1,4 +1,4 @@
 interface:
   display_name: "Build Game Mod"
-  short_description: "Build and verify a game-specific Frida mod"
-  default_prompt: "Use $build-game-mod to analyze my owned offline game and build a verified target-specific mod menu and REPL."
+  short_description: "Build and verify a game-specific Frida Instrument"
+  default_prompt: "Use $build-game-mod to analyze my owned offline game with bounded Record evidence and build a verified target-specific Instrument with human and ACP/MCP Agent interfaces."

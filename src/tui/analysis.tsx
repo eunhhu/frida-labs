@@ -6,7 +6,7 @@ import { ActionPalette, type ActionPanelProps } from "./instrument.js";
 export function AnalysisPanel(props: ActionPanelProps): React.JSX.Element {
   return (
     <Box flexDirection="column" flexGrow={1}>
-      <Box paddingX={1}><Text bold color="green">3. INSPECT · READ ONLY</Text></Box>
+    <Box paddingX={1}><Text bold color="green">2. ANALYZE · READ ONLY</Text></Box>
       <ActionPalette
         {...props}
         mode="analysis"

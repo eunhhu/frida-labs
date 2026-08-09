@@ -221,17 +221,20 @@ export function targetTemplate(name: string): string {
 
 import { ok } from "../../lib/log.js";
 import { detectAll } from "../../lib/detect.js";
+import { recordingDescriptors, recordingRpcSurface } from "../../lib/recording.js";
 
 const engines = detectAll();
 for (const e of engines) ok(\`[${name}] detected \${e.label} @ \${e.module.name}\`);
 
 rpc.exports = {
+  ...recordingRpcSurface(),
   ping(): string {
     return \`alive; engines: \${engines.map((e) => e.id).join(", ") || "none"}\`;
   },
   __describe(): unknown {
     return [
       { name: "ping", label: "Connection check", category: "System", doc: "Sanity check — what the agent sees", capabilities: ["instrument", "analysis"], effect: "read", returns: "scalar" },
+      ...recordingDescriptors(),
       { name: "__describe", doc: "This descriptor" },
     ];
   },

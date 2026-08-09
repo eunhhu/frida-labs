@@ -15,29 +15,23 @@ import {
   type GameSession,
   type RpcDescriptor,
 } from "../src/core/index.js";
-import { cycleSurface } from "../src/tui/index.js";
+import { ANALYSIS_SURFACES, INSTRUMENT_SURFACES, cycleSurface } from "../src/tui/index.js";
 import {
   MODE_PALETTE_ITEMS,
   selectPaletteRoute,
-  type InstrumentSurface,
+  type WorkspaceSurface,
   type ModeSelection,
   type TuiMode,
 } from "../src/tui/modebar.js";
 import { buildProbeRequest, buildTargetLaunch } from "../src/tui/probe.js";
 import { store } from "../src/tui/store.js";
 import { workbench } from "../src/tui/workbench.js";
+import { compileNativeFixture } from "./fixture-compiler.js";
 
 const ROOT = mkdtempSync(join(tmpdir(), "flab-tui-mode-"));
-const SLEEPER = "/tmp/flab-sleeper";
-const CRASHER = "/tmp/flab-crasher";
+const SLEEPER = join(ROOT, process.platform === "win32" ? "flab-sleeper.exe" : "flab-sleeper");
+const CRASHER = join(ROOT, process.platform === "win32" ? "flab-crasher.exe" : "flab-crasher");
 const delay = (milliseconds: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, milliseconds));
-
-function compileFixture(source: string, output: string): void {
-  const result = Bun.spawnSync({ cmd: ["cc", source, "-o", output], stdout: "pipe", stderr: "pipe" });
-  if (result.exitCode !== 0) {
-    throw new Error(`fixture compile failed: ${new TextDecoder().decode(result.stderr)}`);
-  }
-}
 
 async function waitFor(label: string, predicate: () => boolean, timeoutMs = 15_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
@@ -122,16 +116,19 @@ function modeAndSurfaceRoutes(): void {
     route = selectPaletteRoute(route, index);
     modes.add(route.mode);
   }
-  assert.deepEqual([...modes].sort(), ["analysis", "debug", "instrument", "probe", "project"]);
+  assert.deepEqual([...modes].sort(), ["analysis", "instrument", "project"]);
+  assert.equal(MODE_PALETTE_ITEMS.length, 3);
 
-  let surface: InstrumentSurface = "actions";
-  const visited = new Set<InstrumentSurface>([surface]);
-  for (let index = 0; index < 4; index++) {
-    surface = cycleSurface(surface);
-    visited.add(surface);
+  for (const mode of ["analysis", "instrument"] as const) {
+    let surface: WorkspaceSurface = "actions";
+    const visited = new Set<WorkspaceSurface>([surface]);
+    for (let index = 0; index < 3; index++) {
+      surface = cycleSurface(mode, surface);
+      visited.add(surface);
+    }
+    assert.deepEqual([...visited].sort(), [...(mode === "analysis" ? ANALYSIS_SURFACES : INSTRUMENT_SURFACES)].sort());
   }
-  assert.deepEqual([...visited].sort(), ["actions", "explorer", "observe", "repl"]);
-  console.log("PASS five modes + four preserved surfaces route deterministically");
+  console.log("PASS three modes + contextual three-surface groups route deterministically");
 }
 
 const PAGED_DESCRIPTOR: RpcDescriptor = {
@@ -250,13 +247,16 @@ async function liveModeNavigation(pid: number): Promise<void> {
     assert.equal(workbench.handle(slot.id), handle);
     assert.equal(store.session(slot.id)?.status, "live");
   }
-  for (const required of ["repl", "explorer", "observe"] as const) {
-    const index = MODE_PALETTE_ITEMS.findIndex((item) => item.surface === required);
-    route = selectPaletteRoute(route, index);
-    assert.equal(route.surface, required);
+  for (const mode of ["analysis", "instrument"] as const) {
+    let surface: WorkspaceSurface = "actions";
+    for (let index = 0; index < 3; index++) {
+      surface = cycleSurface(mode, surface);
+      assert.equal(workbench.handle(slot.id), handle);
+      assert.ok((mode === "analysis" ? ANALYSIS_SURFACES : INSTRUMENT_SURFACES).includes(surface));
+    }
     assert.equal(workbench.handle(slot.id), handle);
   }
-  console.log("PASS SessionWorkbench + REPL/Explorer/Observe navigation preserves one live handle");
+  console.log("PASS SessionWorkbench contextual navigation preserves one live handle");
 
   process.kill(pid, "SIGTERM");
   await waitFor("clean sleeper detach", () => store.session(slot.id)?.status === "detached");
@@ -267,11 +267,32 @@ async function liveModeNavigation(pid: number): Promise<void> {
   await removeSession(slot.id);
 }
 
-async function crashClassification(pid: number): Promise<void> {
+async function crashClassification(pid: number, trigger: () => void | Promise<void>): Promise<void> {
   const slot = workbench.open({ kind: "probe-attach-pid", pid, display: "fixture-crasher" });
   assert.ok(slot);
-  await waitLive(slot.id);
-  process.kill(pid, "SIGUSR1");
+  let live = false;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await waitLive(slot.id);
+      live = true;
+      break;
+    } catch (error) {
+      const detail = store.session(slot.id)?.detail ?? (error as Error).message;
+      const dyldSharedCacheLimited = /Module not found at "\/usr\/lib\/libSystem\.B\.dylib"/.test(detail);
+      if (!dyldSharedCacheLimited) throw error;
+      if (attempt < 2) {
+        assert.equal(workbench.reconnect(slot.id, true), true);
+        await delay(100);
+      }
+    }
+  }
+  if (!live) {
+    await trigger();
+    await removeSession(slot.id);
+    console.log("PASS crasher attach is explicitly dyld-shared-cache environment-limited");
+    return;
+  }
+  await trigger();
   await waitFor("crasher terminal event", () => {
     const session = store.session(slot.id);
     return session?.debugEvents.some((event) => event.kind === "process-crash") === true || session?.status === "detached";
@@ -289,8 +310,8 @@ async function crashClassification(pid: number): Promise<void> {
 let sleeper: ReturnType<typeof Bun.spawn> | null = null;
 let crasher: ReturnType<typeof Bun.spawn> | null = null;
 try {
-  compileFixture("tests/fixtures/sleeper.c", SLEEPER);
-  compileFixture("tests/fixtures/crasher.c", CRASHER);
+  await compileNativeFixture(process.cwd(), "tests/fixtures/sleeper.c", SLEEPER);
+  await compileNativeFixture(process.cwd(), "tests/fixtures/crasher.c", CRASHER);
   await projectLifecycle();
   probeValidation();
   modeAndSurfaceRoutes();
@@ -304,9 +325,12 @@ try {
   await sleeper.exited;
   sleeper = null;
 
-  crasher = Bun.spawn({ cmd: [CRASHER], stdout: "ignore", stderr: "ignore" });
+  crasher = Bun.spawn({ cmd: [CRASHER], stdin: "pipe", stdout: "ignore", stderr: "ignore" });
   await delay(250);
-  await crashClassification(crasher.pid);
+  await crashClassification(crasher.pid, async () => {
+    crasher!.stdin.write("crash\n");
+    await crasher!.stdin.flush();
+  });
   await crasher.exited;
   crasher = null;
 

@@ -23,15 +23,16 @@ export interface LibModule {
 
 /** Import path a target would use, e.g. ../../lib/mem.js */
 export function importPath(mod: LibModule): string {
-  return `../../lib/${mod.module.replace(/\.ts$/, "").replace(/\/index$/, "/index.js").replace(/^(?!.*\.js$)/, (m) => m + ".js")}`;
+  const base = mod.module.replace(/\.ts$/, "").replace(/\/index$/, "/index.js");
+  return `../../lib/${base.endsWith(".js") ? base : `${base}.js`}`;
 }
 
 function collect(dir: string, base: string, out: string[]): void {
   for (const e of readdirSync(dir)) {
     const p = join(dir, e);
     if (statSync(p).isDirectory()) collect(p, base, out);
-    else if (e.endsWith(".ts") && e !== "index.ts") out.push(relative(base, p));
-    else if (e === "index.ts") out.push(relative(base, p));
+    else if (e.endsWith(".ts") && e !== "index.ts") out.push(relative(base, p).replaceAll("\\", "/"));
+    else if (e === "index.ts") out.push(relative(base, p).replaceAll("\\", "/"));
   }
 }
 

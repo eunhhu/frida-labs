@@ -1,4 +1,4 @@
-// Target entry: Terraria (FNA / Mono) — trainer cheats driven through the
+// Target entry: Terraria (FNA / Mono) — Instrument actions driven through the
 // managed game state via the Mono embedding API exported by Terraria.bin.osx.
 // Run:  flab run terraria
 //
@@ -16,12 +16,16 @@
 // players. pollChat() stays as a fallback for when the native hook is unavailable.
 
 import { ok } from "../../lib/log.js";
+import { createWindowsClrBridge } from "../../lib/clr/runtime.js";
+import { TERRARIA_CLR_PAYLOAD_BASE64, TERRARIA_CLR_PAYLOAD_SHA256 } from "../../lib/clr/terraria-payload.js";
 import { createMono } from "../../lib/mono/index.js";
+import { recordingDescriptors, recordingRpcSurface } from "../../lib/recording.js";
 
 const TICK_MS = 1;
 const CHAT_PREFIX = "/";
 const BIG_STACK = 99999;
 const FREE_SLOTS = 50;
+const WINDOWS_CLR = Process.platform === "windows";
 
 const SDL_EVENT_KEY_DOWN = 0x300;
 const SDLK_RETURN = 0x0d;
@@ -38,9 +42,9 @@ const TOGGLE_FEATURES: Record<string, string> = {
   maptp: "MapTP",
 };
 
-// The manifest's `features` block, flattened (enabledByDefault === initial state).
+// Continuous mutations always start disabled on every runtime.
 const DEFAULT_FEATURES: Record<string, boolean> = Object.fromEntries(
-  Object.keys(TOGGLE_FEATURES).map((id) => [id, true]),
+  Object.keys(TOGGLE_FEATURES).map((id) => [id, false]),
 );
 
 type FeatureId = keyof typeof TOGGLE_FEATURES & string;
@@ -141,6 +145,9 @@ function create(host: CommandHost) {
     const pendingEcho: string[] = [];
     const pendingCommands: string[] = [];
     const stealthDiag: string[] = [];
+    let ticks = 0;
+    let appliedTicks = 0;
+    let lastTickError: string | null = null;
 
     function currentPlayer(): NativePointer {
       const arr = playerArr();
@@ -151,6 +158,7 @@ function create(host: CommandHost) {
     }
 
     function applyToggles(p: NativePointer): void {
+      if (Object.values(features).some(Boolean)) appliedTicks++;
       if (features.god) {
         f.statLife.write(p, Math.max(f.statLifeMax2.read(p), f.statLifeMax.read(p)));
         f.immune.write(p, 1);
@@ -283,7 +291,7 @@ function create(host: CommandHost) {
       if (newText.isNull()) return;
       let msg: string | undefined;
       while ((msg = pendingEcho.shift()) !== undefined) {
-        const s = mono.newString("[Trainer] " + msg);
+        const s = mono.newString("[Instrument] " + msg);
         mono.invoke(newText, NULL, [s, byteBuf(120), byteBuf(230), byteBuf(120)]);
       }
     }
@@ -493,6 +501,45 @@ function create(host: CommandHost) {
       return "HP " + hp + " | Mana " + mp + " | Def " + f.statDefense.read(p) + " | Pos " + pos + summons + " | Active: " + activeList();
     }
 
+    function playerSnapshot(): Record<string, unknown> {
+      const p = currentPlayer();
+      if (p.isNull()) {
+        return { initialized: true, activePlayer: false, features: { ...features }, ticks, appliedTicks, lastTickError };
+      }
+      const read = (field: typeof f.statLife): number | null => field.exists ? field.read(p) : null;
+      return {
+        initialized: true,
+        activePlayer: true,
+        player: p.toString(),
+        life: { current: read(f.statLife), max: Math.max(read(f.statLifeMax) ?? 0, read(f.statLifeMax2) ?? 0) },
+        mana: { current: read(f.statMana), max: Math.max(read(f.statManaMax) ?? 0, read(f.statManaMax2) ?? 0) },
+        breath: { current: read(f.breath), max: read(f.breathMax) },
+        defense: read(f.statDefense),
+        immune: read(f.immune) !== 0,
+        immuneTime: read(f.immuneTime),
+        noKnockback: read(f.noKnockback) !== 0,
+        wing: { current: read(f.wingTime), max: read(f.wingTimeMax) },
+        environment: {
+          lavaImmune: read(f.lavaImmune) !== 0,
+          fireWalk: read(f.fireWalk) !== 0,
+          ignoreWater: read(f.ignoreWater) !== 0,
+          noFallDamage: read(f.noFallDmg) !== 0,
+        },
+        summons: { current: read(f.numMinions), max: read(f.maxMinions), slots: read(f.slotsMinions) },
+        position: posOff < 0 ? null : {
+          x: p.add(posOff).readFloat(),
+          y: p.add(posOff + 4).readFloat(),
+          tileX: Math.round(p.add(posOff).readFloat() / 16),
+          tileY: Math.round(p.add(posOff + 4).readFloat() / 16),
+        },
+        world: { day: dayTime.get() !== 0, time: timeOfDay.get() },
+        features: { ...features },
+        ticks,
+        appliedTicks,
+        lastTickError,
+      };
+    }
+
     function activeList(): string {
       const on: string[] = [];
       for (const id in TOGGLE_FEATURES) if (features[id]) on.push(TOGGLE_FEATURES[id]);
@@ -503,37 +550,159 @@ function create(host: CommandHost) {
 
     const timer = setInterval(() => {
       try {
+        ticks++;
         const p = currentPlayer();
         if (!p.isNull()) applyToggles(p);
         pollChat();
         drainStealth();
-      } catch (_e) {
+        lastTickError = null;
+      } catch (error) {
+        lastTickError = error instanceof Error ? error.message : String(error);
       }
     }, TICK_MS);
 
-    ok("Terraria Trainer ready — cmd('help') or in-game chat with / prefix");
+    ok("Terraria Instrument ready — cmd('help') or in-game chat with / prefix");
 
+    let disposed = false;
     return {
       run(raw: string): string { return runCommand(raw); },
       setFeature(id: FeatureId, on: boolean): string {
+        if (!(id in TOGGLE_FEATURES)) throw new Error(`unknown feature ${JSON.stringify(id)}`);
         features[id] = !!on;
         return TOGGLE_FEATURES[id] + " " + (features[id] ? "ON" : "OFF");
       },
-      dispose(): void { removeStealth(); clearInterval(timer); },
+      state(): Record<string, unknown> {
+        return { initialized: true, enabled: Object.keys(TOGGLE_FEATURES).filter((id) => features[id]), ticks, appliedTicks, lastTickError, clean: disposed };
+      },
+      snapshot(): Record<string, unknown> { return playerSnapshot(); },
+      dispose(): void {
+        if (disposed) return;
+        disposed = true;
+        for (const id of Object.keys(features)) features[id] = false;
+        removeStealth();
+        clearInterval(timer);
+      },
     };
 }
 
-const trainer = create({ log: (line) => ok(line) });
+interface TerrariaInstrument {
+  run(raw: string): string;
+  setFeature(id: FeatureId, on: boolean): string;
+  state(): Record<string, unknown>;
+  snapshot(): Record<string, unknown>;
+  dispose(): unknown;
+}
+
+function createWindows(host: CommandHost): TerrariaInstrument {
+  const bridge = createWindowsClrBridge({
+    assemblyBase64: TERRARIA_CLR_PAYLOAD_BASE64,
+    fileName: `flab-terraria-${TERRARIA_CLR_PAYLOAD_SHA256.slice(0, 12)}.dll`,
+    typeName: "Flab.TerrariaBridge",
+    resultVariable: "FLAB_TERRARIA_RESULT",
+  });
+  const call = (request: Record<string, unknown>): Record<string, unknown> => {
+    const result = bridge.execute(JSON.stringify(request));
+    if (!result || typeof result !== "object" || Array.isArray(result)) throw new Error("CLR bridge returned a non-object result");
+    const record = result as Record<string, unknown>;
+    if (record.ok === false) throw new Error(String(record.error ?? "managed Terraria action failed"));
+    return record;
+  };
+  const probe = call({ op: "probe" });
+  host.log(`[clr] managed bridge ready — ${String(probe.assembly ?? "Terraria")}`);
+  let disposed = false;
+  return {
+    run(raw: string): string {
+      const result = call({ op: "cmd", raw });
+      return typeof result.result === "string" ? result.result : JSON.stringify(result);
+    },
+    setFeature(id: FeatureId, on: boolean): string {
+      const result = call({ op: "set", id, on });
+      return `${id} ${result.enabled === true ? "ON" : "OFF"}`;
+    },
+    state(): Record<string, unknown> { return call({ op: "state" }); },
+    snapshot(): Record<string, unknown> { return call({ op: "snapshot" }); },
+    dispose(): unknown {
+      if (disposed) return { ok: true, stopped: false, clean: true };
+      disposed = true;
+      let result: unknown;
+      try { result = call({ op: "dispose" }); }
+      finally { bridge.dispose(); }
+      return result;
+    },
+  };
+}
+
+let instrument: TerrariaInstrument | null = null;
+
+function requireOffline(confirmed: boolean | undefined, action: string): void {
+  if (confirmed !== true) throw new Error(`${action} requires offlineConfirmed=true`);
+}
+
+function activeInstrument(): TerrariaInstrument {
+  instrument ??= WINDOWS_CLR ? createWindows({ log: (line) => ok(line) }) : create({ log: (line) => ok(line) });
+  return instrument;
+}
+
+function disposeInstrument(): Record<string, unknown> {
+  if (!instrument) return { ok: true, stopped: false, clean: true };
+  const result = instrument.dispose();
+  instrument = null;
+  return result && typeof result === "object" && !Array.isArray(result)
+    ? result as Record<string, unknown>
+    : { ok: true, stopped: true, clean: true };
+}
 
 rpc.exports = {
-  cmd(raw: string): string { return trainer.run(raw); },
-  set(id: FeatureId, on: boolean): string { return trainer.setFeature(id, !!on); },
-  dispose(): void { trainer.dispose(); },
+  ...recordingRpcSurface(),
+  modInfo() {
+    return {
+      game: "Terraria",
+      runtime: WINDOWS_CLR ? ".NET CLR (Windows Steam 1.4.5+)" : "FNA / Mono",
+      supported: true,
+      adapter: WINDOWS_CLR ? "ICLRRuntimeHost + managed reflection payload" : "Mono embedding API",
+      payload: WINDOWS_CLR ? { sha256: TERRARIA_CLR_PAYLOAD_SHA256, transport: "self-contained bundle -> default AppDomain" } : null,
+      limitation: WINDOWS_CLR ? "map right-click teleport, cursor teleport, and full map reveal remain Mono-only; core player, inventory, teleport, time, and continuous assists use the CLR adapter" : null,
+      safety: "Owned offline single-player only; all continuous features start disabled and initialize lazily",
+      cleanup: "resetAll/dispose stops the timer and chat hook; one-shot world/inventory commands are labeled non-restoring",
+    };
+  },
+  modHelp() {
+    return [
+      "1. modState() confirms no hook, timer, or feature is active after attach",
+      "2. set(id, true, true) or cmd(raw, true) only in owned offline play",
+      "3. resetAll() stops continuous enforcement; one-shot command effects may persist",
+    ];
+  },
+  modState() {
+    if (WINDOWS_CLR) return activeInstrument().state();
+    return instrument?.state() ?? { initialized: false, enabled: [], clean: true };
+  },
+  playerSnapshot(): Record<string, unknown> {
+    if (WINDOWS_CLR) return activeInstrument().snapshot();
+    return instrument?.snapshot() ?? { initialized: false, activePlayer: false, features: {}, ticks: 0, appliedTicks: 0, lastTickError: null };
+  },
+  cmd(raw: string, offlineConfirmed?: boolean): string {
+    const verb = raw.trim().split(/\s+/, 1)[0]?.toLowerCase() ?? "";
+    if (!new Set(["help", "status", "stats"]).has(verb)) requireOffline(offlineConfirmed, "cmd");
+    return activeInstrument().run(raw);
+  },
+  set(id: FeatureId, on: boolean, offlineConfirmed?: boolean): string {
+    if (on) requireOffline(offlineConfirmed, "set");
+    return activeInstrument().setFeature(id, !!on);
+  },
+  resetAll(): Record<string, unknown> { return disposeInstrument(); },
+  dispose(): Record<string, unknown> { return disposeInstrument(); },
   __describe(): unknown {
     return [
-      { name: "cmd", args: [{ name: "raw", type: "string" }], doc: "Run a trainer command (see 'help')", capabilities: ["instrument"], effect: "write", returns: "scalar" },
-      { name: "set", args: [{ name: "id", type: "string" }, { name: "on", type: "boolean" }], doc: "Toggle a feature by id", capabilities: ["instrument"], effect: "write", returns: "scalar" },
-      { name: "dispose", doc: "Stop timers, unhook chat, release features", capabilities: ["instrument", "debug"], effect: "control", returns: "scalar" },
+      { name: "modInfo", label: "About this Instrument", category: "Start here", doc: "Runtime, offline safety boundary, and cleanup limitations", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
+      { name: "modHelp", label: "Show the quick guide", category: "Start here", doc: "Explicit offline activation and cleanup flow", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
+      { name: "modState", label: "Show active features", category: "Start here", doc: "Lazy initialization, enabled feature ids, and clean state", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
+      { name: "playerSnapshot", label: "Read live player values", category: "Player", doc: "Structured HP, mana, breath, movement, environment, summon, position, world, and apply-tick readback", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
+      { name: "cmd", label: "Run a Terraria command", category: "Player", args: [{ name: "raw", type: "string" }, { name: "offlineConfirmed", type: "boolean?" }], doc: "Mutating commands require offlineConfirmed=true; one-shot effects may persist", capabilities: ["instrument"], effect: "control", returns: "scalar" },
+      { name: "set", label: "Toggle continuous feature", category: "Training", args: [{ name: "id", type: "string" }, { name: "on", type: "boolean" }, { name: "offlineConfirmed", type: "boolean?" }], doc: "Enabling requires offlineConfirmed=true and starts the owned timer lazily", capabilities: ["instrument"], effect: "control", returns: "scalar", statusAction: "modState" },
+      { name: "resetAll", label: "Stop continuous features", category: "Start here", doc: "Disable features and remove the timer/chat hook", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
+      { name: "dispose", label: "Dispose owned handles", category: "Start here", doc: "Automatic detach cleanup", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
+      ...recordingDescriptors(),
       { name: "__describe", doc: "This descriptor" },
     ];
   },
@@ -556,7 +725,7 @@ function num(token: string | undefined): number {
 }
 
 const HELP = [
-  "Terraria Trainer — type in this console or in-game chat (prefix /):",
+  "Terraria Instrument — type in this console or in-game chat (prefix /):",
   "  heal | mana | breath          restore HP / mana / breath",
   "  revive                        revive in place (clear death state, keep position)",
   "  respawn                       respawn at spawn point (like natural respawn)",

@@ -623,6 +623,15 @@ function entries(
   return names.map((name) => ({ source, name, capabilities, effect, returns }));
 }
 
+function recordingEntries(source: DescriptorExpectation["source"]): DescriptorExpectation[] {
+  return [
+    { source, name: "recordPlan", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
+    { source, name: "recordStart", capabilities: ["instrument"], effect: "hook", returns: "verification", statusAction: "recordStatus" },
+    { source, name: "recordStatus", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
+    { source, name: "recordStop", capabilities: ["instrument"], effect: "control", returns: "verification", statusAction: "recordStatus" },
+  ];
+}
+
 function descriptorInventory(): DescriptorExpectation[] {
   const inventory: DescriptorExpectation[] = [];
   const descriptor = /\{ name: "([^"]+)".*?capabilities: \[([^\]]*)\], effect: "([^"]+)", returns: "([^"]+)"(?:, statusAction: "([^"]+)")? \}/g;
@@ -642,6 +651,7 @@ function descriptorInventory(): DescriptorExpectation[] {
         });
       }
     }
+    if (/(?:recording\.)?recordingDescriptors\(\)/.test(text)) inventory.push(...recordingEntries(source));
   }
   return inventory;
 }
@@ -654,6 +664,7 @@ test("all target and scaffold descriptors match the approved capability/effect i
     ...entries("probe", ["instrument", "analysis"], "read", "json", ["demoSym", "demoObjcGate", "demoJavaGate"]),
     { source: "probe", name: "memorySnapshot", capabilities: ["instrument", "analysis"], effect: "read", returns: "json", statusAction: "memorySnapshotList" },
     { source: "probe", name: "memorySnapshotDelete", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "memorySnapshotList" },
+    ...recordingEntries("probe"),
     ...entries("probe", ["instrument"], "write", "scalar", ["poke", "freeze"]),
     ...entries("probe", ["instrument"], "control", "scalar", ["unfreeze", "detachAll"]),
     ...entries("probe", ["instrument"], "hook", "scalar", ["watch", "trace", "monoTrace"]),
@@ -666,25 +677,44 @@ test("all target and scaffold descriptors match the approved capability/effect i
     ...entries("probe", ["instrument"], "control", "table", ["instrumentStopAll"]),
     ...entries("probe", ["instrument", "debug"], "hook", "verification", ["demoStalker", "demoMam", "demoHookVerified", "demoReplace"]),
     ...entries("probe", ["debug"], "control", "json", ["demoExcrashInstall"]),
-    ...entries("adofai", ["instrument", "analysis"], "read", "json", ["info", "classes"]),
-    ...entries("adofai", ["instrument", "analysis"], "read", "table", ["assemblies", "methods", "fields"]),
+    ...entries("adofai", ["instrument", "analysis"], "read", "json", ["modInfo", "modState", "info", "classes"]),
+    ...entries("adofai", ["instrument", "analysis"], "read", "table", ["modHelp", "assemblies", "methods", "fields"]),
     ...entries("adofai", ["instrument", "analysis"], "read", "scalar", ["address"]),
-    ...entries("adofai", ["instrument", "debug"], "hook", "scalar", ["trace"]),
-    ...entries("terraria", ["instrument"], "write", "scalar", ["cmd", "set"]),
-    ...entries("terraria", ["instrument", "debug"], "control", "scalar", ["dispose"]),
-    ...entries("piu", ["instrument"], "write", "scalar", ["toggle"]),
+    ...entries("adofai", ["instrument", "analysis"], "read", "json", ["assistRead"]),
+    { source: "adofai", name: "assistApply", capabilities: ["instrument"], effect: "write", returns: "verification", statusAction: "assistRead" },
+    { source: "adofai", name: "assistEnforce", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "assistRead" },
+    { source: "adofai", name: "assistReset", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "assistRead" },
+    { source: "adofai", name: "trace", capabilities: ["instrument", "debug"], effect: "hook", returns: "verification", statusAction: "modState" },
+    { source: "adofai", name: "resetAll", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
+    { source: "adofai", name: "dispose", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
+    ...recordingEntries("adofai"),
+    ...entries("terraria", ["instrument", "analysis"], "read", "json", ["modInfo", "modState", "playerSnapshot"]),
+    ...entries("terraria", ["instrument", "analysis"], "read", "table", ["modHelp"]),
+    ...entries("terraria", ["instrument"], "control", "scalar", ["cmd"]),
+    { source: "terraria", name: "set", capabilities: ["instrument"], effect: "control", returns: "scalar", statusAction: "modState" },
+    { source: "terraria", name: "resetAll", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
+    { source: "terraria", name: "dispose", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
+    ...recordingEntries("terraria"),
+    ...entries("piu", ["instrument", "analysis"], "read", "json", ["modInfo", "modState", "judgmentStats"]),
+    ...entries("piu", ["instrument", "analysis"], "read", "table", ["modHelp"]),
+    { source: "piu", name: "toggle", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
+    { source: "piu", name: "resetAll", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
+    { source: "piu", name: "dispose", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
+    ...recordingEntries("piu"),
     ...entries("meccha", ["instrument", "analysis"], "read", "json", ["modInfo", "modState", "info", "espStatus", "moveRead", "moveStatus"]),
+    ...entries("meccha", ["analysis"], "read", "json", ["moveProbe"]),
     ...entries("meccha", ["instrument", "analysis"], "read", "table", ["modHelp", "classes", "espSnapshot"]),
     { source: "meccha", name: "espInstall", capabilities: ["instrument", "debug"], effect: "hook", returns: "scalar", statusAction: "espStatus" },
     { source: "meccha", name: "espRemove", capabilities: ["instrument", "debug"], effect: "control", returns: "scalar", statusAction: "espStatus" },
     { source: "meccha", name: "espTest", capabilities: ["instrument", "debug"], effect: "control", returns: "scalar", statusAction: "espStatus" },
     { source: "meccha", name: "moveApply", capabilities: ["instrument"], effect: "write", returns: "json", statusAction: "moveStatus" },
-    { source: "meccha", name: "moveFly", capabilities: ["instrument"], effect: "write", returns: "json", statusAction: "moveStatus" },
     { source: "meccha", name: "moveEnforce", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "moveStatus" },
     { source: "meccha", name: "moveReset", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "moveStatus" },
     { source: "meccha", name: "resetAll", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
     { source: "meccha", name: "dispose", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
+    ...recordingEntries("meccha"),
     ...entries("scaffold", ["instrument", "analysis"], "read", "scalar", ["ping"]),
+    ...recordingEntries("scaffold"),
   ];
 
   const actual = descriptorInventory();

@@ -10,7 +10,8 @@ import {
 import type { SessionState } from "./store.js";
 import { workbench } from "./workbench.js";
 
-const ACTION_VIEW = 7;
+/** UX invariant: never render more than three selectable actions at once. */
+export const ACTION_VIEW = 3;
 const MAX_RECEIPT_ROWS = 12;
 const MANAGED_ORDER = [
   "instrumentStart",
@@ -250,8 +251,7 @@ export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
   const { session, mode } = props;
   const windowSize = useWindowSize();
   const compact = windowSize.rows < 36 || windowSize.columns < 100;
-  const minimal = windowSize.rows < 28 || windowSize.columns < 90;
-  const actionView = minimal ? 3 : compact ? 4 : ACTION_VIEW;
+  const actionView = ACTION_VIEW;
   const [cursor, setCursor] = useState(0);
   const [capture, setCapture] = useState<CaptureState | null>(null);
   const [busy, setBusy] = useState(false);
@@ -418,7 +418,6 @@ export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
         )}
         <Text dimColor>
           ↑/↓ choose · Enter {busy ? "running…" : "run"} · i details
-          {props.enablePaging ? " · j/k result · PgUp/PgDn page" : ""}
         </Text>
         {actions.length > 0 && (
           <Text dimColor>{actions.length} actions · {categorySummary} · selected {selectedIndex + 1}</Text>
@@ -455,7 +454,7 @@ export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
                 effect {selected.effect} · returns {selected.returns} · capabilities {selected.capabilities.join(", ")}
               </Text>
             </>
-          ) : <Text dimColor>i → show technical name, types, and capabilities</Text>}
+          ) : <Text dimColor>Technical details hidden.</Text>}
         </Box>
       )}
 
@@ -517,5 +516,5 @@ export function ActionPalette(props: ActionPaletteProps): React.JSX.Element {
 }
 
 export function InstrumentPanel(props: ActionPanelProps): React.JSX.Element {
-  return <ActionPalette {...props} mode="instrument" title="Mods and game controls" />;
+  return <ActionPalette {...props} mode="instrument" title="Instrument actions" />;
 }

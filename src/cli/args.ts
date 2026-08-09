@@ -30,6 +30,7 @@ const VALUE_FLAGS = new Set([
   "platforms",
   "proc",
   "query",
+  "upstream",
 ]);
 
 function booleanLiteral(value: string): boolean | null {

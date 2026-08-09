@@ -1,19 +1,50 @@
 import { expect, test } from "bun:test";
 import { buildProbeRequest, buildTargetLaunch } from "../src/tui/probe.js";
-import { launchForProcess, launchOnDevice, cycleSurface, processChoices, suggestedTargetName } from "../src/tui/index.js";
+import {
+  ANALYSIS_SURFACES,
+  INSTRUMENT_SURFACES,
+  launchForProcess,
+  launchOnDevice,
+  cycleSurface,
+  processChoices,
+  suggestedTargetName,
+} from "../src/tui/index.js";
 import { projectCommand } from "../src/tui/project.js";
-import { journeyStage, modeAt, modeRoute, nextMode, paletteItemAt, routeGlobalInput } from "../src/tui/modebar.js";
+import { PROJECT_VIEW } from "../src/tui/project.js";
+import { EXPLORER_VIEW } from "../src/tui/explorer.js";
+import { ACTION_VIEW } from "../src/tui/instrument.js";
+import { parseRecordQuery, RECORD_ACTIONS } from "../src/tui/record.js";
+import { MODE_PALETTE_ITEMS, journeyStage, modeAt, modeRoute, nextMode, paletteItemAt, routeGlobalInput } from "../src/tui/modebar.js";
 
 test("mode and surface navigation wraps without invalid state", () => {
-  expect(nextMode("analysis")).toBe("project");
-  expect(modeAt(-1)).toBe("analysis");
+  expect(nextMode("instrument")).toBe("project");
+  expect(modeAt(-1)).toBe("instrument");
   expect(paletteItemAt(999).mode).toBeDefined();
-  expect(cycleSurface("observe")).toBe("actions");
+  expect(cycleSurface("instrument", "observe")).toBe("actions");
+  expect(cycleSurface("analysis", "record")).toBe("actions");
   expect(modeRoute("analysis", 7)).toEqual({ mode: "analysis", sessionId: 7 });
   expect(modeRoute("project", null)).toEqual({ mode: "project", view: "list" });
   expect(journeyStage(modeRoute("project", null))).toBe("connect");
-  expect(journeyStage(modeRoute("instrument", 7))).toBe("mods");
-  expect(journeyStage(modeRoute("analysis", 7))).toBe("inspect");
+  expect(journeyStage(modeRoute("analysis", 7))).toBe("analyze");
+  expect(journeyStage(modeRoute("instrument", 7))).toBe("instrument");
+});
+
+test("every visible TUI chooser is capped at three options", () => {
+  expect(MODE_PALETTE_ITEMS).toHaveLength(3);
+  expect(ANALYSIS_SURFACES).toHaveLength(3);
+  expect(INSTRUMENT_SURFACES).toHaveLength(3);
+  expect(ACTION_VIEW).toBe(3);
+  expect(EXPLORER_VIEW).toBe(3);
+  expect(PROJECT_VIEW).toBe(3);
+  expect(RECORD_ACTIONS).toHaveLength(3);
+});
+
+test("Record query keeps one-field UX while allowing precise module scoping", () => {
+  expect(parseRecordQuery("damage")).toEqual({ query: "damage" });
+  expect(parseRecordQuery(" GameAssembly.dylib ! ApplyDamage ")).toEqual({
+    module: "GameAssembly.dylib",
+    query: "ApplyDamage",
+  });
 });
 
 test("first-run process choices hide system noise and prioritize saved games", () => {

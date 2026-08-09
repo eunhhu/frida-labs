@@ -26,6 +26,7 @@ import * as objc from "../../lib/objc.js";
 import * as java from "../../lib/java.js";
 import * as excrash from "../../lib/excrash.js";
 import * as instruments from "../../lib/instruments.js";
+import * as recording from "../../lib/recording.js";
 import { mono } from "../../lib/mono/index.js";
 
 const engines = detect.detectAll();
@@ -38,6 +39,7 @@ let nextSnapshotId = 1;
 let rpcSurface: RpcExports = {};
 
 function stopEverything(): instruments.InstrumentResult {
+  recording.recordStop();
   const result = instruments.instrumentStopAll();
   for (const handle of freezes.values()) handle.stop();
   freezes.clear();
@@ -48,6 +50,7 @@ function stopEverything(): instruments.InstrumentResult {
 }
 
 const base = {
+  ...recording.recordingRpcSurface(),
   engines(): Array<{ id: string; label: string; module: string }> {
     return engines.map((e) => ({ id: e.id, label: e.label, module: e.module.name }));
   },
@@ -218,6 +221,7 @@ const base = {
       { name: "instrumentStop", args: [{ name: "id", type: "string" }], doc: "Stop an instrument but keep its history", capabilities: ["instrument"], effect: "control", returns: "verification", statusAction: "instrumentStatus" },
       { name: "instrumentDelete", args: [{ name: "id", type: "string" }], doc: "Stop and permanently remove one managed instrument", capabilities: ["instrument"], effect: "control", returns: "scalar" },
       { name: "instrumentStopAll", doc: "Stop every managed instrument before detach or reload", capabilities: ["instrument"], effect: "control", returns: "table" },
+      ...recording.recordingDescriptors(),
       { name: "detachAll", capabilities: ["instrument"], effect: "control", returns: "scalar" },
       { name: "demoStalker", args: [{ name: "ms", type: "integer?" }], doc: "Stalker block capture demo (firing-verified)", capabilities: ["instrument", "debug"], effect: "hook", returns: "verification" },
       { name: "demoMam", doc: "MemoryAccessMonitor hit demo", capabilities: ["instrument", "debug"], effect: "hook", returns: "verification" },
