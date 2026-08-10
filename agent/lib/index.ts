@@ -21,6 +21,9 @@ export * as java from "./java.js";
 export * as excrash from "./excrash.js";
 export * as recording from "./recording.js";
 export * as instrument from "./instrument.js";
+export * as loader from "./loader.js";
+export * as protections from "./protections.js";
+export * as jtrace from "./jtrace.js";
 export {
   defineInstrument,
   read as instrumentRead,

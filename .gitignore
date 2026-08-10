@@ -33,3 +33,6 @@ artifacts/
 
 # compile
 *.bun-build
+
+# compiled launcher binary (regenerate with: bun run build-bin)
+/flab

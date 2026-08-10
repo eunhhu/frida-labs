@@ -18,3 +18,14 @@ test("interactive human launches open the dashboard while explicit expert transp
   expect(humanTuiSource(["run", "terraria"], false)).toBeNull();
   expect(humanTuiSource([], false)).toBeNull();
 });
+
+test("FLAB_NO_TUI forces CLI dispatch even on a TTY", () => {
+  process.env.FLAB_NO_TUI = "1";
+  try {
+    expect(humanTuiSource([], true)).toBeNull();
+    expect(humanTuiSource(["run", "terraria"], true)).toBeNull();
+    expect(humanTuiSource(["tui"], true)).toBeNull();
+  } finally {
+    delete process.env.FLAB_NO_TUI;
+  }
+});

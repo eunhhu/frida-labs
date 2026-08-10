@@ -49,6 +49,8 @@ You do not need to learn the full CLI to use the TUI.
 An AI agent should not scrape the TUI or send arrow keys. An ACP client starts
 `flab acp`; an MCP harness starts `flab mcp`; a basic process can keep one
 `flab agent --json` process open and exchange typed NDJSON requests.
+Running bare `flab` on a TTY opens the TUI. Automation that owns a TTY (CI,
+tmux, some IDEs) can force plain CLI dispatch with `FLAB_NO_TUI=1`.
 
 ## Connect local, USB/mobile, or remote
 

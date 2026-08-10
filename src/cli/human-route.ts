@@ -6,6 +6,9 @@ function hasFlag(argv: readonly string[], name: string): boolean {
 
 /** Decide which invocations belong to the human Ink frontend before CLI dispatch. */
 export function humanTuiSource(argv: readonly string[], tty: boolean): HumanTuiSource | null {
+  // CI and TTY-owning automation must never land on a blocking UI: FLAB_NO_TUI
+  // forces plain CLI dispatch regardless of TTY state.
+  if (process.env.FLAB_NO_TUI) return null;
   if (argv.length === 0) return tty ? "default" : null;
   if (argv[0] === "tui") return "tui";
   if (argv[0] !== "run" || !tty) return null;

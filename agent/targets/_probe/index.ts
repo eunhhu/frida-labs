@@ -4,9 +4,11 @@
 // Injects without any per-game config, detects the engine/managed runtime,
 // and exposes the matching exploration surface over rpc.exports:
 //   - always: modules/imports/exports/symbols, scan, strings, bounded memory
-//             snapshots/diffs, peek/poke/freeze/watch, trace
+//             snapshots/diffs, peek/poke/freeze/watch, trace,
+//             protection scan, loader-aware module hooking
 //   - Unity Mono:   mono assemblies/classes/methods/invoke
 //   - Cocos2d-x:    cocos symbol browse
+//   - Android ART:  Java class trace, crypto/webview/intent watch, prefs dump
 //
 // Use this to recon a new game before writing a real target under
 // agent/targets/<game>/.
@@ -27,11 +29,15 @@ import * as java from "../../lib/java.js";
 import * as excrash from "../../lib/excrash.js";
 import * as instruments from "../../lib/instruments.js";
 import * as recording from "../../lib/recording.js";
+import * as loader from "../../lib/loader.js";
+import * as protections from "../../lib/protections.js";
+import * as jtrace from "../../lib/jtrace.js";
 import { mono } from "../../lib/mono/index.js";
 
 const engines = detect.detectAll();
 if (engines.length === 0) ok("_probe: no known engine detected — native-only surface");
 else for (const e of engines) ok(`_probe: detected ${e.label} @ ${e.module.name}`);
+const javaAvailable = java.available();
 
 const freezes = new Map<string, watchlib.FreezeHandle>();
 const snapshots = new Map<string, { address: NativePointer; bytes: ArrayBuffer; length: number }>();
@@ -106,6 +112,26 @@ const base = {
     return [...snapshots].map(([id, record]) => ({ id, address: record.address.toString(), length: record.length }));
   },
   memorySnapshotDelete(id: string) { return { deleted: snapshots.delete(id), id }; },
+  protectionsScan() {
+    return protections.scanProtections().map((hit) => ({ id: hit.id, category: hit.category, detail: hit.detail }));
+  },
+  hookModuleLoad(modName: string, q?: string) {
+    loader.hookNowOrOnLoad(modName, (mod) => {
+      ok(`module ${mod.name} mapped @ ${mod.base}`);
+      if (q) {
+        try {
+          const address = mod.getExportByName(q);
+          hook.trace(address, {});
+          ok(`tracing ${mod.name}!${q} @ ${address}`);
+        } catch (e) {
+          warn(`${mod.name}!${q} unresolved: ${(e as Error).message}`);
+        }
+      }
+    });
+    return Process.findModuleByName(modName) !== null
+      ? `hooked already-loaded ${modName}`
+      : `watching loader for ${modName}`;
+  },
   peek(addr: string, type?: watchlib.WatchType) { return watchlib.peek(ptr(addr), type); },
   poke(addr: string, value: number, type?: watchlib.WatchType) { return watchlib.poke(ptr(addr), value, type); },
   freeze(addr: string, value: number, type?: watchlib.WatchType): string {
@@ -222,6 +248,8 @@ const base = {
       { name: "instrumentDelete", args: [{ name: "id", type: "string" }], doc: "Stop and permanently remove one managed instrument", capabilities: ["instrument"], effect: "control", returns: "scalar" },
       { name: "instrumentStopAll", doc: "Stop every managed instrument before detach or reload", capabilities: ["instrument"], effect: "control", returns: "table" },
       ...recording.recordingDescriptors(),
+      { name: "protectionsScan", label: "Scan protection primitives", category: "Discovery", doc: "Report anti-debug / root-detect / SSL-pinning / crypto surfaces present in the process (detection only)", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
+      { name: "hookModuleLoad", label: "Hook on module load", category: "Discovery", args: [{ name: "modName", type: "string" }, { name: "q", type: "string?" }], doc: "Loader-aware hook: wait for a module to map (dlopen hook), optionally trace one export", capabilities: ["instrument"], effect: "hook", returns: "scalar" },
       { name: "detachAll", capabilities: ["instrument"], effect: "control", returns: "scalar" },
       { name: "demoStalker", args: [{ name: "ms", type: "integer?" }], doc: "Stalker block capture demo (firing-verified)", capabilities: ["instrument", "debug"], effect: "hook", returns: "verification" },
       { name: "demoMam", doc: "MemoryAccessMonitor hit demo", capabilities: ["instrument", "debug"], effect: "hook", returns: "verification" },
@@ -240,6 +268,15 @@ const base = {
       );
     }
     if (engines.some((e) => e.id === "cocos2dx")) d.push({ name: "cocosSymbols", args: [{ name: "re", type: "string" }], capabilities: ["instrument", "analysis"], effect: "read", returns: "table" });
+    if (javaAvailable) {
+      d.push(
+        { name: "javaTraceClass", label: "Trace a Java class", category: "Discovery", args: [{ name: "className", type: "string" }], doc: "Trace every declared method (all overloads) of one Java class", capabilities: ["instrument"], effect: "hook", returns: "scalar" },
+        { name: "javaWatchCrypto", label: "Watch crypto operations", category: "Discovery", doc: "Observe Cipher/MessageDigest keys, plaintext, and digests (observation only)", capabilities: ["instrument", "analysis"], effect: "hook", returns: "scalar" },
+        { name: "javaWatchWebViews", label: "Watch WebViews", category: "Discovery", doc: "Enable contents debugging; observe loadUrl and addJavascriptInterface bridges", capabilities: ["instrument", "analysis"], effect: "hook", returns: "scalar" },
+        { name: "javaDumpPrefs", label: "Dump SharedPreferences", category: "Discovery", doc: "Dump every SharedPreferences file in the app's private storage", capabilities: ["instrument", "analysis"], effect: "read", returns: "scalar" },
+        { name: "javaWatchIntents", label: "Watch intents", category: "Discovery", doc: "Log startActivity and sendBroadcast with extras", capabilities: ["instrument", "analysis"], effect: "hook", returns: "scalar" },
+      );
+    }
     d.push({ name: "__describe", doc: "This descriptor" });
     const metadata = new Map(d.map((item) => [String((item as { name: string }).name), item]));
     return Object.keys(rpcSurface).map((name) => metadata.get(name) ?? {
@@ -273,6 +310,17 @@ if (engines.some((e) => e.id === "unity-mono")) {
 
 if (engines.some((e) => e.id === "cocos2dx")) {
   extra.cocosSymbols = (re: string) => cocos.symbols(new RegExp(re, "i"));
+}
+
+if (javaAvailable) {
+  extra.javaTraceClass = (className: string) => {
+    const count = jtrace.traceClass(className);
+    return count > 0 ? `tracing ${count} overload(s) in ${className}` : `cannot trace ${className} (VM or class unavailable)`;
+  };
+  extra.javaWatchCrypto = () => jtrace.watchCrypto() ? "crypto watch installed" : "no Java runtime";
+  extra.javaWatchWebViews = () => jtrace.watchWebViews() ? "webview watch installed" : "no Java runtime";
+  extra.javaDumpPrefs = () => jtrace.dumpSharedPreferences() ? "preferences dumped to log" : "no Java runtime";
+  extra.javaWatchIntents = () => jtrace.watchIntents() ? "intent watch installed" : "no Java runtime";
 }
 
 if (engines.some((e) => e.id === "unreal")) {
