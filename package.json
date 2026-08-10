@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/server": "^2.0.0",
-    "frida": "^17.16.4",
+    "frida": "^17.17.0",
     "frida-java-bridge": "^7.0.13",
     "frida-objc-bridge": "^8.0.6",
     "ink": "^7.1.1",
