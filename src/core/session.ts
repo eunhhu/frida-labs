@@ -32,6 +32,8 @@ export interface TargetLaunch {
   kind: "target";
   target: string;
   processOverride?: string;
+  spawn?: boolean;
+  noWatch?: boolean;
   spawnGating?: boolean;
   childGating?: boolean;
   device?: DeviceSelector;
@@ -156,18 +158,22 @@ export function resolveLaunchRequest(request: unknown): LaunchResolution {
       };
     }
     case "target": {
-      requireExactKeys(request, ["kind", "target", "processOverride", "spawnGating", "childGating", "device"]);
+      requireExactKeys(request, ["kind", "target", "processOverride", "spawn", "noWatch", "spawnGating", "childGating", "device"]);
       const target = requireNonempty(hasOwn(request, "target") ? request.target : undefined, "target");
       const processOverride = !hasOwn(request, "processOverride") || request.processOverride === undefined
         ? undefined
         : requireNonempty(request.processOverride, "processOverride");
       const spawnGating = optionalBoolean(request, "spawnGating");
       const childGating = optionalBoolean(request, "childGating");
+      const spawn = optionalBoolean(request, "spawn");
+      const noWatch = optionalBoolean(request, "noWatch");
       const device = optionalDevice(request);
       return {
         options: {
           target,
           ...(processOverride === undefined ? {} : { processOverride }),
+          ...(spawn === undefined ? {} : { spawn }),
+          ...(noWatch === undefined ? {} : { noWatch }),
           ...(spawnGating === undefined ? {} : { spawnGating }),
           ...(childGating === undefined ? {} : { childGating }),
           ...(device === undefined ? {} : { device }),
@@ -616,7 +622,18 @@ export async function startSession(opts: SessionOptions, ev: SessionEvents): Pro
         name: descriptor.name,
         ...(descriptor.label ? { label: descriptor.label } : {}),
         ...(descriptor.category ? { category: descriptor.category } : {}),
-        args: descriptor.args.map((arg) => ({ ...arg })),
+        args: descriptor.args.map((arg) => {
+          const { options, ...ui } = arg.ui;
+          return {
+            name: arg.name,
+            type: arg.type,
+            optional: arg.optional,
+            ui: {
+              ...ui,
+              ...(options ? { options: options.map((option) => ({ ...option })) } : {}),
+            },
+          };
+        }),
         ...(descriptor.doc ? { doc: descriptor.doc } : {}),
         capabilities: [...descriptor.capabilities],
         effect: descriptor.effect,

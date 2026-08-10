@@ -1,12 +1,13 @@
 // Target entry: A Dance of Fire and Ice (Unity, Mono backend).
 // Build/run:  flab run adofai
 //
-// All the heavy lifting is in ../../lib/mono — this only exposes rpc for the REPL.
+// All the heavy lifting is in ../../lib/mono — this only exposes target RPC glue.
 
 import { ok } from "../../lib/log.js";
 import type { Verification } from "../../lib/hook.js";
 import { mono } from "../../lib/mono/index.js";
-import { recordingDescriptors, recordingRpcSurface } from "../../lib/recording.js";
+import { control, defineInstrument, field, hook, read, write } from "../../lib/instrument.js";
+import { recordingInstrumentActions } from "../../lib/recording.js";
 
 const traces = new Set<Verification>();
 
@@ -143,105 +144,113 @@ function runtimeInfo(): { assemblies: number; hasAssemblyCSharp: boolean; classe
   return { assemblies: asms.length, hasAssemblyCSharp: !!cs, classes: cs ? mono.classes(cs).length : 0 };
 }
 
-rpc.exports = {
-  ...recordingRpcSurface(),
-  modInfo() {
-    return {
+rpc.exports = defineInstrument({
+  info: read({
+    label: "About this Instrument",
+    category: "Start here",
+    doc: "Runtime, safety boundary, and live discovery coverage",
+  }, () => ({
       game: "A Dance of Fire and Ice",
       runtime: "Unity Mono",
       safety: "Owned offline play only; gameplay assistance requires explicit confirmation",
       coverage: "managed discovery/Record plus live-verified no-fail controller fields",
       facts: runtimeInfo(),
-    };
-  },
-  modHelp() {
-    return [
-      "1. info(), assemblies(), or classes(pattern) for read-only discovery",
-      "2. load an offline level, then assistApply({noFail:true}, true)",
-      "3. assistReset() or resetAll() restores captured live values",
-    ];
-  },
-  modState() {
-    return {
+  })),
+  state: read({
+    label: "Active Instrument state",
+    category: "Start here",
+    doc: "Owned traces, assistance, enforcement, and clean state",
+  }, () => ({
       traces: [...traces].map((trace) => trace.status()),
       traceCount: traces.size,
       assist: assistRead(),
       clean: traces.size === 0 && enforceTimer === null && Object.keys(wanted).length === 0,
-    };
+  })),
+  actions: {
+    assistApply: write({
+      label: "Gameplay assistance",
+      category: "Gameplay",
+      args: [
+        field.json("opts", { label: "Assistance values", default: "{\"noFail\":true}", placeholder: "{\"noFail\":true}" }),
+        field.offline(),
+      ],
+      doc: "Apply no-fail, infinite margin, or freeroam invulnerability with immediate readback",
+      returns: "verification",
+      status: "assistRead",
+    }, (opts: Record<string, boolean>, offlineConfirmed: boolean) => {
+      if (offlineConfirmed !== true) throw new Error("assistApply requires offlineConfirmed=true");
+      if (!opts || Array.isArray(opts) || typeof opts !== "object") throw new Error("assist options must be an object");
+      const keys = Object.keys(opts);
+      if (keys.length === 0) throw new Error("assist options must contain at least one field");
+      for (const key of keys) {
+        if (!(key in assistFields)) throw new Error(`unknown assist field ${JSON.stringify(key)}`);
+        if (typeof opts[key] !== "boolean") throw new Error(`${key} must be boolean`);
+        wanted[key as AssistKey] = opts[key];
+      }
+      return applyWanted();
+    }),
+    assistEnforce: control({
+      label: "Continuous assistance",
+      category: "Gameplay",
+      args: [
+        field.checkbox("on", { label: "Continuous enforcement" }),
+        field.offline({ optional: true }),
+        field.slider("intervalMs", { label: "Refresh interval (ms)", optional: true, integer: true, min: 50, max: 5000, step: 50, default: 250 }),
+      ],
+      doc: "Re-resolve the live controller across level transitions",
+      status: "assistRead",
+    }, (on: boolean, offlineConfirmed?: boolean, intervalMs?: number) => {
+      if (on && offlineConfirmed !== true) throw new Error("assistEnforce requires offlineConfirmed=true when enabling");
+      return setEnforcement(!!on, intervalMs);
+    }),
+    assistReset: control({
+      label: "Restore gameplay assistance",
+      category: "Gameplay",
+      doc: "Stop enforcement and restore captured live values",
+      status: "assistRead",
+    }, resetAssist),
+    assistRead: read({
+      label: "Gameplay assistance status",
+      category: "Gameplay",
+      doc: "Live controller readiness, values, enforcement, and write receipts",
+    }, assistRead),
+    trace: hook({
+      label: "Trace managed method",
+      category: "Debug",
+      args: [field.text("className"), field.text("method"), field.text("ns", { optional: true })],
+      doc: "Owned firing-verified trace; resetAll detaches it",
+      capabilities: ["instrument", "debug"],
+      returns: "verification",
+      status: "modState",
+    }, (className: string, method: string, ns?: string | null) => {
+      const trace = mono.trace(mono.method(ns ?? "", className, method));
+      if (!trace) return { ok: false, error: "method not found" };
+      traces.add(trace);
+      return { ok: true, method: `${className}.${method}`, verification: trace.status(), traceCount: traces.size };
+    }),
+    info: read({ label: "Mono runtime facts", category: "Discovery", doc: "Assembly/image/class counts" }, runtimeInfo),
+    assemblies: read({ label: "Loaded assemblies", category: "Discovery", doc: "Loaded assembly image names", returns: "table" }, () => mono.assemblies()),
+    classes: read({
+      label: "Managed classes",
+      category: "Discovery",
+      args: [field.text("pattern", { optional: true, label: "Class filter", placeholder: "optional regex" })],
+      doc: "Assembly-CSharp classes with optional regex filter",
+    }, (pattern?: string) => {
+      const names = mono.classes().map((candidate) => candidate.ns ? `${candidate.ns}.${candidate.name}` : candidate.name);
+      if (!pattern) return { total: names.length, names };
+      const regex = new RegExp(pattern, "i");
+      return names.filter((name) => regex.test(name));
+    }),
+    methods: read({ label: "Class methods", category: "Discovery", args: [field.text("className"), field.text("ns", { optional: true })], returns: "table" },
+      (className: string, ns?: string | null) => mono.methods(mono.classByName(ns ?? "", className)).map((method) => method.full)),
+    fields: read({ label: "Class fields", category: "Discovery", args: [field.text("className"), field.text("ns", { optional: true })], returns: "table" },
+      (className: string, ns?: string | null) => mono.fields(mono.classByName(ns ?? "", className)).map((item) => `+0x${item.offset.toString(16)} ${item.name}`)),
+    address: read({ label: "Method address", category: "Discovery", args: [field.text("className"), field.text("method"), field.text("ns", { optional: true })], returns: "scalar" },
+      (className: string, method: string, ns?: string | null) => mono.addressOf(mono.method(ns ?? "", className, method))?.toString() ?? null),
+    ...recordingInstrumentActions(),
   },
-  info() { return runtimeInfo(); },
-  assemblies() { return mono.assemblies(); },
-
-  /** All Assembly-CSharp class names, or those matching a regex. */
-  classes(pattern?: string) {
-    const all = mono.classes();
-    const names = all.map((c) => (c.ns ? `${c.ns}.${c.name}` : c.name));
-    if (!pattern) return { total: names.length, names };
-    const re = new RegExp(pattern, "i");
-    return names.filter((n) => re.test(n));
-  },
-
-  methods(className: string, ns?: string | null) {
-    return mono.methods(mono.classByName(ns ?? "", className)).map((m) => m.full);
-  },
-  fields(className: string, ns?: string | null) {
-    return mono.fields(mono.classByName(ns ?? "", className)).map((f) => `+0x${f.offset.toString(16)} ${f.name}`);
-  },
-
-  /** Native (JIT) address of a managed method — feed to disassemble/decompile. */
-  address(className: string, method: string, ns?: string | null) {
-    return mono.addressOf(mono.method(ns ?? "", className, method))?.toString() ?? null;
-  },
-  /** Log every call to a managed method. */
-  trace(className: string, method: string, ns?: string | null) {
-    const trace = mono.trace(mono.method(ns ?? "", className, method));
-    if (!trace) return { ok: false, error: "method not found" };
-    traces.add(trace);
-    return { ok: true, method: `${className}.${method}`, verification: trace.status(), traceCount: traces.size };
-  },
-  assistRead,
-  assistApply(opts: Record<string, boolean>, offlineConfirmed: boolean) {
-    if (offlineConfirmed !== true) throw new Error("assistApply requires offlineConfirmed=true");
-    if (!opts || Array.isArray(opts) || typeof opts !== "object") throw new Error("assist options must be an object");
-    const keys = Object.keys(opts);
-    if (keys.length === 0) throw new Error("assist options must contain at least one field");
-    for (const key of keys) {
-      if (!(key in assistFields)) throw new Error(`unknown assist field ${JSON.stringify(key)}`);
-      if (typeof opts[key] !== "boolean") throw new Error(`${key} must be boolean`);
-      wanted[key as AssistKey] = opts[key];
-    }
-    return applyWanted();
-  },
-  assistEnforce(on: boolean, offlineConfirmed?: boolean, intervalMs?: number) {
-    if (on && offlineConfirmed !== true) throw new Error("assistEnforce requires offlineConfirmed=true when enabling");
-    return setEnforcement(!!on, intervalMs);
-  },
-  assistReset() { return resetAssist(); },
-  resetAll() { return stopTraces(); },
-  dispose() { return stopTraces(); },
-
-  __describe(): unknown {
-    return [
-      { name: "modInfo", label: "About this Instrument", category: "Start here", doc: "Runtime, safety boundary, and live discovery coverage", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "modHelp", label: "Show the quick guide", category: "Start here", doc: "Three-step discovery, tracing, and cleanup flow", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
-      { name: "modState", label: "Show active traces", category: "Start here", doc: "Firing state for every owned managed trace", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "info", label: "Read Mono runtime facts", category: "Discovery", doc: "Assembly/image/class counts", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "assemblies", label: "List loaded assemblies", category: "Discovery", doc: "Loaded assembly image names", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
-      { name: "classes", label: "List managed classes", category: "Discovery", args: [{ name: "pattern", type: "string?" }], doc: "Assembly-CSharp classes with optional regex filter", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "methods", label: "List class methods", category: "Discovery", args: [{ name: "className", type: "string" }, { name: "ns", type: "string?" }], capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
-      { name: "fields", label: "List class fields", category: "Discovery", args: [{ name: "className", type: "string" }, { name: "ns", type: "string?" }], capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
-      { name: "address", label: "Resolve method address", category: "Discovery", args: [{ name: "className", type: "string" }, { name: "method", type: "string" }, { name: "ns", type: "string?" }], capabilities: ["instrument", "analysis"], effect: "read", returns: "scalar" },
-      { name: "trace", label: "Trace managed method", category: "Debug", args: [{ name: "className", type: "string" }, { name: "method", type: "string" }, { name: "ns", type: "string?" }], doc: "Owned firing-verified trace; resetAll detaches it", capabilities: ["instrument", "debug"], effect: "hook", returns: "verification", statusAction: "modState" },
-      { name: "assistRead", label: "Read gameplay assistance", category: "Gameplay", doc: "Live scrController readiness, values, enforcement, and write receipts", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "assistApply", label: "Apply gameplay assistance", category: "Gameplay", args: [{ name: "opts", type: "json" }, { name: "offlineConfirmed", type: "boolean" }], doc: "Apply noFail, infiniteMargin, or freeroamInvulnerability with immediate readback", capabilities: ["instrument"], effect: "write", returns: "verification", statusAction: "assistRead" },
-      { name: "assistEnforce", label: "Keep assistance active", category: "Gameplay", args: [{ name: "on", type: "boolean" }, { name: "offlineConfirmed", type: "boolean?" }, { name: "intervalMs", type: "integer?" }], doc: "Re-resolve the live controller across level transitions", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "assistRead" },
-      { name: "assistReset", label: "Restore gameplay assistance", category: "Gameplay", doc: "Stop enforcement and restore captured live values", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "assistRead" },
-      { name: "resetAll", label: "Stop every trace", category: "Start here", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
-      { name: "dispose", label: "Dispose owned handles", category: "Start here", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
-      ...recordingDescriptors(),
-      { name: "__describe", doc: "This descriptor" },
-    ];
-  },
-};
+  reset: control({ label: "Reset every change", category: "Start here", status: "modState" }, stopTraces),
+  dispose: control({ label: "Dispose owned handles", category: "Start here", status: "modState" }, stopTraces),
+});
 
 ok(`adofai (mono) ready — ${mono.assemblies().length} assemblies`);

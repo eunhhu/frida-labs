@@ -103,10 +103,10 @@ test("every saved and newly scaffolded Instrument exposes the common Record surf
   const root = repoRoot();
   for (const [name, target] of Object.entries(loadManifest(root).targets)) {
     const source = readFileSync(join(root, target.entry), "utf8");
-    expect(source, `${name} RPC surface`).toContain("recordingRpcSurface()");
-    expect(source, `${name} descriptors`).toContain("recordingDescriptors()");
+    expect(source, `${name} declarative Record surface`).toContain("recordingInstrumentActions()");
+    expect(source, `${name} single Instrument declaration`).toContain("defineInstrument({");
   }
   const scaffold = targetTemplate("record-ready");
-  expect(scaffold).toContain("recordingRpcSurface()");
-  expect(scaffold).toContain("recordingDescriptors()");
+  expect(scaffold).toContain("recordingInstrumentActions()");
+  expect(scaffold).toContain("defineInstrument({");
 });

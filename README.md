@@ -22,12 +22,15 @@ Then use the screen in this order (the number keys switch directly):
 
 1. Press `1`: **Connect** — type the game name, choose it, and press Enter.
 2. Press `2`: **Analyze** — inspect actions, explore memory, or Record one play scenario.
-3. Press `3`: **Instrument** — run linked game features, scripts, and live output.
+3. Press `3`: **Instrument** — use generated input fields, checkboxes, sliders,
+   value choices, and a linked live-state pane.
 
 Press `Ctrl+V` to switch local, USB/mobile, exact, or remote devices. Press
 `Ctrl+P` switches the same three workspaces. Every selectable TUI list renders
 at most three choices; advanced surfaces stay contextual under Analyze or
-Instrument.
+Instrument. An action form also renders at most three fields at once. Use
+`←`/`→` or Space for checkboxes, sliders, and choices; type directly into input
+fields; press `s` to refresh linked state.
 
 You do not need to learn the full CLI to use the TUI.
 
@@ -126,8 +129,10 @@ The owned-offline Windows compatibility sweep is in
 
 A finished Instrument provides the same game actions through:
 
-- a readable game-specific menu in `bun run flab -- tui <target>`;
-- a human REPL in `bun run flab -- run <target>`;
+- a game-specific control panel in `bun run flab -- run <target>` (also
+  available through `tui <target>`);
+- an opt-in advanced human console in `bun run flab -- run <target> --console` with generated
+  `.help`, `/help`, and `:help` commands;
 - a persistent agent session in `bun run flab -- run <target> --session --json`;
 - the global authoring API in `bun run flab -- agent --json`;
 - an auto-detected upstream ACP agent in `bun run flab -- acp`;
@@ -146,10 +151,11 @@ command for its exact usage.
 
 ```sh
 bun run flab                              # guided TUI
-bun run flab -- tui terraria              # connect one saved game immediately
+bun run flab -- tui terraria              # same dashboard from the guided TUI command
 bun run flab -- devices                   # reachable devices
 bun run flab -- processes Terraria        # search running apps
-bun run flab -- run terraria              # saved target + human REPL
+bun run flab -- run terraria              # saved target + human controls/status dashboard
+bun run flab -- run terraria --console    # expert console (.help or /help)
 bun run flab -- probe --pid 1234           # generic quick analysis
 ```
 
@@ -264,7 +270,8 @@ NDJSON-only. The protocol is `flab.ndjson.v1`.
 ## What a saved Instrument contains
 
 Targets live in `agent/targets/<game>/index.ts` and are registered in
-`frida-labs.json`. Their `__describe()` metadata drives all three interfaces.
+`frida-labs.json`. Each uses `defineInstrument()` once; flab generates callable
+RPC handlers and `__describe()` metadata for every interface from that declaration.
 
 Use short labels and stable categories such as `Objectives`, `Economy`,
 `Player`, `Combat`, `World`, `Inventory`, `Entities`, `Assist`, `Visual`,

@@ -434,7 +434,7 @@ async function probeTarget(target: string, process: ProcessInfo): Promise<Target
     const descriptors = await withTimeout("target describe", session.describe());
     const actions = new ActionService();
     const reads: Record<string, string> = {};
-    for (const action of ["modInfo", "modHelp", "modState", "recordStatus"]) {
+    for (const action of ["modInfo", "modState", "recordStatus"]) {
       callableRead(descriptors, action);
       reads[action] = bounded((await invokeRead(actions, session, 10, action)).result.summary);
     }

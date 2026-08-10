@@ -7,12 +7,12 @@ instance. Do not use the overlay or movement controls in public play.
 ## Start
 
 ```sh
-bun run flab -- tui mecchachameleon --device local
 bun run flab -- run mecchachameleon --device local
+bun run flab -- run mecchachameleon --device local --console
 bun run flab -- run mecchachameleon --device local --session --json
 ```
 
-## Flow
+## Equivalent expert-console flow
 
 ```js
 await modInfo()

@@ -5,6 +5,14 @@ level or isolated training scene.
 
 ## Flow
 
+Human dashboard:
+
+```sh
+bun run flab -- run adofai
+```
+
+Equivalent expert-console calls (`--console`):
+
 ```js
 await assistRead() // ready=false until a level is loaded
 await assistApply({ noFail: true, infiniteMargin: true }, true)

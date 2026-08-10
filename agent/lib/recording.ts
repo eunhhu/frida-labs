@@ -2,6 +2,15 @@
 // Bounded function-call recording for human-play analysis. The target emits
 // structured events; host code persists and summarizes them for AI agents.
 
+import {
+  control,
+  hook,
+  instrumentDescriptors,
+  instrumentHandlers,
+  read,
+  type InstrumentActions,
+} from "./instrument.js";
+
 export const RECORD_EVENT_SCHEMA = "flab.record.event.v1";
 
 export interface RecordCandidate {
@@ -338,15 +347,43 @@ export function recordStop(): Record<string, unknown> {
 
 /** Reusable RPC surface for every generic probe and game Instrument. */
 export function recordingRpcSurface() {
-  return { recordPlan, recordStart, recordStatus, recordStop };
+  return instrumentHandlers(recordingInstrumentActions());
 }
 
 /** One truthful descriptor inventory shared by human and agent interfaces. */
 export function recordingDescriptors(): unknown[] {
-  return [
-    { name: "recordPlan", label: "Plan function recording", category: "Record", args: [{ name: "query", type: "string" }, { name: "module", type: "string?" }, { name: "limit", type: "integer?" }], doc: "Find bounded native export/symbol candidates before human-play recording", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
-    { name: "recordStart", label: "Start analysis Record", category: "Record", args: [{ name: "recordId", type: "string" }, { name: "probes", type: "json" }, { name: "options", type: "json?" }], doc: "Hook 1..64 selected functions and emit bounded timing, raw argument, return, thread, and optional backtrace events", capabilities: ["instrument"], effect: "hook", returns: "verification", statusAction: "recordStatus" },
-    { name: "recordStatus", label: "Read Record status", category: "Record", doc: "Read active Record counts and per-function hits", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-    { name: "recordStop", label: "Stop analysis Record", category: "Record", doc: "Detach every Record hook and return bounded counts", capabilities: ["instrument"], effect: "control", returns: "verification", statusAction: "recordStatus" },
-  ];
+  return instrumentDescriptors(recordingInstrumentActions());
+}
+
+/** Declarative entries for targets using defineInstrument(). */
+export function recordingInstrumentActions(): InstrumentActions {
+  return {
+    recordPlan: read({
+      label: "Plan function recording",
+      category: "Record",
+      args: [{ name: "query", type: "string" }, { name: "module", type: "string?" }, { name: "limit", type: "integer?" }],
+      doc: "Find bounded native export/symbol candidates before human-play recording",
+      returns: "table",
+    }, recordPlan),
+    recordStart: hook({
+      label: "Start analysis Record",
+      category: "Record",
+      args: [{ name: "recordId", type: "string" }, { name: "probes", type: "json" }, { name: "options", type: "json?" }],
+      doc: "Hook 1..64 selected functions and emit bounded timing, raw argument, return, thread, and optional backtrace events",
+      returns: "verification",
+      status: "recordStatus",
+    }, recordStart),
+    recordStatus: read({
+      label: "Read Record status",
+      category: "Record",
+      doc: "Read active Record counts and per-function hits",
+    }, recordStatus),
+    recordStop: control({
+      label: "Stop analysis Record",
+      category: "Record",
+      doc: "Detach every Record hook and return bounded counts",
+      returns: "verification",
+      status: "recordStatus",
+    }, recordStop),
+  };
 }

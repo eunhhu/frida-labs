@@ -140,6 +140,11 @@ export function machineCapabilities(): Record<string, unknown> {
       action: { id: "request-id", op: "action", mode: "analysis|instrument|debug", action: "descriptor name", args: ["raw", "strings"], offset: 0 },
       close: { id: "request-id", op: "close" },
     },
+    descriptorUi: {
+      controls: ["input", "checkbox", "slider", "select"],
+      state: "statusAction or zero-argument modState",
+      help: [".help", "/help", ":help"],
+    },
     instrumentLifecycle: {
       create: "instrumentStart(kind, address, options?)",
       inspect: "instrumentList(state?) / instrumentStatus(id)",

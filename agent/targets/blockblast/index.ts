@@ -8,7 +8,8 @@ import { ActivityWindowController } from "../../lib/android-activity.js";
 import { FrameMeter } from "../../lib/frame-meter.js";
 import { api, perform as javaPerform } from "../../lib/java.js";
 import { ok } from "../../lib/log.js";
-import { recordingDescriptors, recordingRpcSurface } from "../../lib/recording.js";
+import { control, defineInstrument, field, hook, read, write } from "../../lib/instrument.js";
+import { recordingInstrumentActions } from "../../lib/recording.js";
 
 const ACTIVITY = "org.cocos2dx.javascript.AppActivity";
 const JS_BRIDGE = "org.cocos2dx.javascript.JsCallJava";
@@ -374,10 +375,12 @@ async function resetAll(): Promise<unknown> {
   };
 }
 
-const surface = {
-  ...recordingRpcSurface(),
-  modInfo(): unknown {
-    return {
+rpc.exports = defineInstrument({
+  info: read({
+    label: "About this Instrument",
+    category: "Start here",
+    doc: "Tested build, runtime APIs, safety boundary, and reset coverage",
+  }, () => ({
       game: "Block Blast!",
       package: "com.block.juggle",
       testedVersion: "10.4.9",
@@ -385,18 +388,12 @@ const surface = {
       runtime: "Cocos2d-x / game JS traits / typed local storage",
       safety: "Authorized offline single-player only. No rankings, cloud state, purchases, ads, or remote values.",
       cleanup: "Score/chapter and survival mode are resettable. Clear-board is an explicit one-shot board action.",
-    };
-  },
-  modHelp(): unknown {
-    return [
-      "Read: progressRead(), survivalStatus()",
-      "Progress: scoreSet(value, true), adventureUnlockThrough(level, true), then gameReload()",
-      "Play: survivalSetEnabled(true|false); classicBoardClearNow(true) only inside a classic score board",
-      "Cleanup: resetAll(); call gameReload() if restored save values must appear immediately",
-      "Safety: the true argument confirms a fully offline single-player session",
-    ];
-  },
-  async modState(): Promise<unknown> {
+  })),
+  state: read({
+    label: "Active changes",
+    category: "Start here",
+    doc: "Score, chapters, survival traits, window, FPS meter, and reset ownership",
+  }, async () => {
     let survival: unknown;
     try { survival = await survivalStatus(); } catch (error) { survival = { available: false, error: errorText(error) }; }
     return {
@@ -406,47 +403,73 @@ const surface = {
       performance: frameMeter.status(),
       clean: originalStorage.size === 0 && !survivalOwned && !frameMeter.status().running,
     };
+  }),
+  actions: {
+    scoreSet: write({
+      label: "Current and best score",
+      category: "Progress",
+      args: [field.integer("score", { label: "Score", placeholder: "0..999999999" }), field.offline()],
+      doc: "Set score through the game's four local keys; reset restores every original; reload required",
+      status: "progressRead",
+    }, setScore),
+    adventureUnlockThrough: write({
+      label: "Adventure unlock",
+      category: "Content",
+      args: [field.slider("level", { label: "Adventure level", integer: true, min: 1, max: 96, step: 1, default: 1 }), field.offline()],
+      doc: "Unlock through level 1..96 through the game's chapter save API; reset restores the original",
+      status: "progressRead",
+    }, unlockAdventure),
+    survivalSetEnabled: control({
+      label: "No-fail + unlimited revives",
+      category: "Gameplay",
+      args: [field.checkbox("enabled", { label: "No-fail + unlimited revives" })],
+      doc: "Activate four shipped classic/adventure survival traits; reset removes only traits owned by this session",
+      status: "survivalStatus",
+    }, setSurvival),
+    classicBoardClearNow: write({
+      label: "Clear classic board now",
+      category: "Gameplay",
+      args: [field.offline()],
+      doc: "Require a live classic score proxy; adventure is rejected; this one-shot action is not undone by reset",
+    }, clearBoard),
+    gameReload: control({
+      label: "Reload game",
+      category: "Progress",
+      doc: "Apply save changes or restoration to the visible scene",
+    }, reloadGame),
+    qolKeepAwake: control({
+      label: "Keep screen awake",
+      category: "QoL",
+      args: [field.checkbox("enabled", { label: "Keep screen awake" })],
+      doc: "Toggle the Activity flag; reset restores its original value",
+      status: "modState",
+    }, (enabled: boolean) => windowControl.setKeepScreenOn(enabled)),
+    performanceStart: hook({
+      label: "FPS meter",
+      category: "QoL",
+      doc: "Observe EGL frames without changing gameplay",
+      returns: "verification",
+      status: "performanceStatus",
+    }, () => frameMeter.start()),
+    performanceStop: control({ label: "Stop FPS meter", category: "QoL", returns: "verification", status: "performanceStatus" }, () => frameMeter.stop()),
+    progressRead: read({ label: "Score and unlocked levels", category: "Progress", doc: "Read live typed save values without changing them" }, progressState),
+    survivalStatus: read({ label: "Survival trait status", category: "Gameplay", doc: "Verify each shipped trait exists and is active" }, survivalStatus),
+    performanceStatus: read({ label: "FPS meter status", category: "QoL", returns: "verification" }, () => frameMeter.status()),
+    runtimeRead: read({ label: "Hooked game APIs", category: "Discovery", doc: "Live Cocos module, Java bridges, engine, process, and architecture" }, runtimeRead),
+    featureCatalog: read({ label: "Mapped game systems", category: "Discovery", returns: "table" }, () => discoveredTraits),
+    ...recordingInstrumentActions(),
   },
-  progressRead: progressState,
-  scoreSet: setScore,
-  adventureUnlockThrough: unlockAdventure,
-  survivalSetEnabled: setSurvival,
-  survivalStatus,
-  classicBoardClearNow: clearBoard,
-  gameReload: reloadGame,
-  runtimeRead,
-  featureCatalog(): unknown { return discoveredTraits; },
-  async qolKeepAwake(enabled: boolean): Promise<unknown> { return windowControl.setKeepScreenOn(enabled); },
-  performanceStart(): unknown { return frameMeter.start(); },
-  performanceStatus(): unknown { return frameMeter.status(); },
-  performanceStop(): unknown { return frameMeter.stop(); },
-  resetAll,
-  async dispose(): Promise<unknown> { return resetAll(); },
-  __describe(): unknown {
-    return [
-      { name: "modInfo", label: "About this game mod", category: "Start here", doc: "Tested build, runtime APIs, safety boundary, and reset coverage", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "modHelp", label: "Show the 4-step quick guide", category: "Start here", doc: "Read, modify, play, and reset commands", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
-      { name: "modState", label: "Show every active change", category: "Start here", doc: "Score, chapters, survival traits, window, FPS meter, and reset ownership", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "progressRead", label: "Read score and unlocked levels", category: "Progress", doc: "Read live typed save values without changing them", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "scoreSet", label: "Set current and best score", category: "Progress", args: [{ name: "score", type: "integer" }, { name: "offlineConfirmed", type: "boolean" }], doc: "Set 0..999,999,999 through the game's four local score keys; resetAll restores every original; reload required", capabilities: ["instrument"], effect: "write", returns: "json", statusAction: "progressRead" },
-      { name: "adventureUnlockThrough", label: "Unlock adventure through level", category: "Content", args: [{ name: "level", type: "integer" }, { name: "offlineConfirmed", type: "boolean" }], doc: "Unlock levels 1..96 through the game's chapter save API; resetAll restores the original; reload required", capabilities: ["instrument"], effect: "write", returns: "json", statusAction: "progressRead" },
-      { name: "survivalSetEnabled", label: "Toggle no-fail + unlimited revives", category: "Gameplay", args: [{ name: "enabled", type: "boolean" }], doc: "Dynamically activate four shipped classic/adventure survival traits; resetAll removes only traits owned by this session", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "survivalStatus" },
-      { name: "survivalStatus", label: "Check survival traits", category: "Gameplay", doc: "Verify each shipped trait exists and is active in the live Cocos runtime", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "classicBoardClearNow", label: "Clear a classic board now", category: "Gameplay", args: [{ name: "offlineConfirmed", type: "boolean" }], doc: "Require a live classic score proxy, then call clearAllBlocksImmediate; adventure is rejected before mutation; one-shot and not undone by resetAll", capabilities: ["instrument"], effect: "write", returns: "json" },
-      { name: "gameReload", label: "Reload game to apply save changes", category: "Progress", doc: "Call AppActivity.reLoadGame after score/chapter writes or restoration", capabilities: ["instrument"], effect: "control", returns: "json" },
-      { name: "runtimeRead", label: "Show hooked game APIs", category: "Discovery", doc: "Live Cocos module, exact Java bridges, engine, process, and architecture", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "featureCatalog", label: "Show mapped game systems", category: "Discovery", doc: "Runtime function/trait/storage evidence and callable status", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
-      { name: "qolKeepAwake", label: "Keep screen awake", category: "QoL", args: [{ name: "enabled", type: "boolean" }], doc: "Toggle the Activity flag; resetAll restores its original value", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
-      { name: "performanceStart", label: "Start FPS meter", category: "QoL", doc: "Observe EGL frames without changing gameplay", capabilities: ["instrument"], effect: "hook", returns: "verification", statusAction: "performanceStatus" },
-      { name: "performanceStatus", label: "Check FPS meter", category: "QoL", doc: "Frame count, elapsed time, measured FPS, and callback evidence", capabilities: ["instrument", "analysis"], effect: "read", returns: "verification" },
-      { name: "performanceStop", label: "Stop FPS meter", category: "QoL", doc: "Detach the owned EGL listener", capabilities: ["instrument"], effect: "control", returns: "verification", statusAction: "performanceStatus" },
-      { name: "resetAll", label: "Reset every reversible change", category: "Start here", doc: "Restore score/chapter values, survival traits, Activity flags, and listeners", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
-      { name: "dispose", label: "Dispose safely", category: "Debug", doc: "Cleanup alias used before reload or detach", capabilities: ["instrument", "debug"], effect: "control", returns: "json" },
-      ...recordingDescriptors(),
-      { name: "__describe", doc: "This descriptor" },
-    ];
-  },
-};
-
-rpc.exports = surface;
+  reset: control({
+    label: "Reset every reversible change",
+    category: "Start here",
+    doc: "Restore score/chapter values, survival traits, Activity flags, and listeners",
+    status: "modState",
+  }, resetAll),
+  dispose: control({
+    label: "Dispose safely",
+    category: "Debug",
+    doc: "Cleanup alias used before reload or detach",
+    capabilities: ["instrument", "debug"],
+  }, resetAll),
+});
 ok("[blockblast] real game APIs ready: score, chapters, survival traits, board clear");

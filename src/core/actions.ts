@@ -4,11 +4,31 @@ export type RpcCapability = "instrument" | "debug" | "analysis";
 export type RpcEffect = "read" | "write" | "hook" | "control";
 export type RpcArgType = "string" | "number" | "integer" | "boolean" | "json" | "address" | "pattern";
 export type RpcReturnType = "scalar" | "json" | "table" | "hex" | "verification";
+export type RpcUiControl = "input" | "checkbox" | "slider" | "select";
+export type RpcUiValue = string | number | boolean;
+
+export interface RpcUiOption {
+  label: string;
+  value: RpcUiValue;
+}
+
+export interface RpcArgUiDescriptor {
+  /** Human control. Omitted controls are inferred from the argument type. */
+  control?: RpcUiControl;
+  label?: string;
+  placeholder?: string;
+  default?: RpcUiValue;
+  min?: number;
+  max?: number;
+  step?: number;
+  options?: RpcUiOption[];
+}
 
 export interface RpcArgDescriptor {
   name: string;
   type?: RpcArgType | `${RpcArgType}?`;
   optional?: boolean;
+  ui?: RpcArgUiDescriptor;
 }
 
 export interface RpcDescriptor {
@@ -29,6 +49,9 @@ export interface CanonicalRpcArgDescriptor {
   name: string;
   type: RpcArgType;
   optional: boolean;
+  ui: Readonly<Required<Pick<RpcArgUiDescriptor, "control">> & Omit<RpcArgUiDescriptor, "control" | "options"> & {
+    options?: readonly Readonly<RpcUiOption>[];
+  }>;
 }
 
 export interface CanonicalRpcDescriptor {
@@ -169,6 +192,7 @@ const CAPABILITIES = new Set<RpcCapability>(["instrument", "debug", "analysis"])
 const EFFECTS = new Set<RpcEffect>(["read", "write", "hook", "control"]);
 const ARG_TYPES = new Set<RpcArgType>(["string", "number", "integer", "boolean", "json", "address", "pattern"]);
 const RETURN_TYPES = new Set<RpcReturnType>(["scalar", "json", "table", "hex", "verification"]);
+const UI_CONTROLS = new Set<RpcUiControl>(["input", "checkbox", "slider", "select"]);
 const MODES = new Set<ActionMode>(["instrument", "debug", "analysis"]);
 const STATUSES = new Set<ActionStatus>(["running", "passed", "failed"]);
 const DEBUG_KINDS = new Set<DebugEventKind>([
@@ -289,6 +313,104 @@ function normalizeWarningList(warnings: readonly string[]): string[] {
   return output;
 }
 
+function uiValueMatchesType(value: unknown, type: RpcArgType): value is RpcUiValue {
+  if (type === "boolean") return typeof value === "boolean";
+  if (type === "number") return typeof value === "number" && Number.isFinite(value);
+  if (type === "integer") return typeof value === "number" && Number.isSafeInteger(value);
+  return typeof value === "string";
+}
+
+function normalizeArgUi(
+  input: unknown,
+  type: RpcArgType,
+): { ui?: CanonicalRpcArgDescriptor["ui"]; malformed: boolean } {
+  if (input === undefined) {
+    return { ui: { control: type === "boolean" ? "checkbox" : "input" }, malformed: false };
+  }
+  if (!isRecord(input)) return { malformed: true };
+
+  for (const field of ["label", "placeholder"] as const) {
+    if (own(input, field) && input[field] !== undefined &&
+        (typeof input[field] !== "string" || input[field].trim() === "")) {
+      return { malformed: true };
+    }
+  }
+
+  let control: RpcUiControl;
+  if (input.control === undefined) {
+    control = Array.isArray(input.options)
+      ? "select"
+      : input.min !== undefined || input.max !== undefined || input.step !== undefined
+        ? "slider"
+        : type === "boolean" ? "checkbox" : "input";
+  } else if (typeof input.control === "string" && UI_CONTROLS.has(input.control as RpcUiControl)) {
+    control = input.control as RpcUiControl;
+  } else {
+    return { malformed: true };
+  }
+
+  const ui: RpcArgUiDescriptor & { control: RpcUiControl } = { control };
+  if (typeof input.label === "string") ui.label = input.label.trim();
+  if (typeof input.placeholder === "string") ui.placeholder = input.placeholder;
+
+  if (own(input, "default") && input.default !== undefined) {
+    if (!uiValueMatchesType(input.default, type)) return { malformed: true };
+    ui.default = input.default;
+  }
+
+  if (control === "checkbox") {
+    if (type !== "boolean" || input.options !== undefined || input.min !== undefined || input.max !== undefined || input.step !== undefined) {
+      return { malformed: true };
+    }
+  } else if (control === "slider") {
+    if (type !== "number" && type !== "integer") return { malformed: true };
+    if (typeof input.min !== "number" || !Number.isFinite(input.min) ||
+        typeof input.max !== "number" || !Number.isFinite(input.max) || input.max <= input.min ||
+        typeof input.step !== "number" || !Number.isFinite(input.step) || input.step <= 0) {
+      return { malformed: true };
+    }
+    if (type === "integer" && (![input.min, input.max, input.step].every(Number.isSafeInteger))) return { malformed: true };
+    if (typeof ui.default === "number" && (ui.default < input.min || ui.default > input.max)) return { malformed: true };
+    ui.min = input.min;
+    ui.max = input.max;
+    ui.step = input.step;
+  } else if (control === "select") {
+    if (!Array.isArray(input.options) || input.options.length === 0 || input.options.length > 32) return { malformed: true };
+    const options: RpcUiOption[] = [];
+    const values = new Set<string>();
+    for (const option of input.options) {
+      if (!isRecord(option) || typeof option.label !== "string" || option.label.trim() === "" ||
+          !uiValueMatchesType(option.value, type)) return { malformed: true };
+      const key = stableSerialize(option.value);
+      if (values.has(key)) return { malformed: true };
+      values.add(key);
+      options.push({ label: option.label.trim(), value: option.value });
+    }
+    if (ui.default !== undefined && !values.has(stableSerialize(ui.default))) return { malformed: true };
+    ui.options = options;
+  } else if (input.options !== undefined || input.min !== undefined || input.max !== undefined || input.step !== undefined) {
+    return { malformed: true };
+  }
+
+  if (control !== "input" && input.placeholder !== undefined) return { malformed: true };
+  if (control === "slider" && ui.default === undefined) ui.default = ui.min;
+  if (control === "select" && ui.default === undefined) ui.default = ui.options![0]!.value;
+
+  return {
+    ui: {
+      control: ui.control,
+      ...(ui.label !== undefined ? { label: ui.label } : {}),
+      ...(ui.placeholder !== undefined ? { placeholder: ui.placeholder } : {}),
+      ...(ui.default !== undefined ? { default: ui.default } : {}),
+      ...(ui.min !== undefined ? { min: ui.min } : {}),
+      ...(ui.max !== undefined ? { max: ui.max } : {}),
+      ...(ui.step !== undefined ? { step: ui.step } : {}),
+      ...(ui.options !== undefined ? { options: ui.options } : {}),
+    },
+    malformed: false,
+  };
+}
+
 function normalizeArg(
   input: unknown,
   descriptorName: string,
@@ -322,11 +444,18 @@ function normalizeArg(
     }
   }
 
+  const normalizedUi = normalizeArgUi(input.ui, type);
+  if (normalizedUi.malformed || !normalizedUi.ui) {
+    warnings.push(`Descriptor ${JSON.stringify(descriptorName)} argument ${index + 1} has malformed UI metadata`);
+    return { instrumentOnly: false, malformed: true };
+  }
+
   return {
     arg: {
       name: input.name,
       type,
       optional: typeof input.optional === "boolean" ? input.optional : optionalFromType,
+      ui: normalizedUi.ui,
     },
     instrumentOnly,
     malformed: false,
@@ -480,6 +609,31 @@ export function normalizeRpcDescriptors(input: unknown): DescriptorNormalization
     descriptors: parsed.filter((descriptor) => byName.get(descriptor.name) === descriptor),
     warnings,
   };
+}
+
+/** Host-generated human help. Targets describe controls; they do not implement modHelp boilerplate. */
+export function descriptorHelpRows(input: unknown): string[] {
+  const normalized = normalizeRpcDescriptors(input);
+  const categories = new Map<string, CanonicalRpcDescriptor[]>();
+  for (const descriptor of normalized.descriptors) {
+    const category = descriptor.category ?? "Other";
+    const rows = categories.get(category) ?? [];
+    rows.push(descriptor);
+    categories.set(category, rows);
+  }
+  const output: string[] = [];
+  for (const [category, descriptors] of categories) {
+    output.push(`[${category}]`);
+    for (const descriptor of descriptors) {
+      const controls = descriptor.args.map((arg) =>
+        `${arg.ui.label ?? arg.name}${arg.optional ? "?" : ""}:${arg.ui.control}`).join(", ");
+      const signature = `${descriptor.name}(${controls})`;
+      output.push(`  ${signature}${descriptor.label && descriptor.label !== descriptor.name ? ` — ${descriptor.label}` : ""}`);
+      if (descriptor.doc) output.push(`    ${descriptor.doc.replace(/\s+/g, " ").trim()}`);
+    }
+  }
+  if (output.length === 0) output.push("(no described actions)");
+  return output;
 }
 
 

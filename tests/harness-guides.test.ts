@@ -11,6 +11,16 @@ const skillPaths = [
   ".gjc/skills/build-game-mod/SKILL.md",
 ] as const;
 
+const gameTargetPaths = [
+  "agent/targets/adofai/index.ts",
+  "agent/targets/battlecatskr/index.ts",
+  "agent/targets/blockblast/index.ts",
+  "agent/targets/growcastle/index.ts",
+  "agent/targets/mecchachameleon/index.ts",
+  "agent/targets/piu/index.ts",
+  "agent/targets/terraria/index.ts",
+] as const;
+
 test("every coding harness resolves the same game-mod completion contract", () => {
   const guide = read("docs/agent-game-mod-guide.md");
   for (const phrase of [
@@ -24,8 +34,11 @@ test("every coding harness resolves the same game-mod completion contract", () =
     "module.link",
     "instrument.package",
     "modInfo",
-    "modHelp",
     "modState",
+    "checkbox",
+    "slider",
+    "select",
+    "Do not implement a per-target",
     "label",
     "category",
     "instrumentStart",
@@ -49,7 +62,7 @@ test("every coding harness resolves the same game-mod completion contract", () =
     expect(skill.startsWith("---\nname: build-game-mod\ndescription:")).toBe(true);
     expect(skill).toContain("docs/agent-game-mod-guide.md");
     expect(skill).toContain("TUI");
-    expect(skill).toContain("REPL");
+    expect(skill).toContain("advanced console");
     expect(skill).toContain("NDJSON");
     expect(skill).toContain("LIVE VERIFICATION BLOCKED");
     expect(skill).toContain("win-loss");
@@ -61,6 +74,7 @@ test("every coding harness resolves the same game-mod completion contract", () =
     expect(skill).toContain("flab acp");
     expect(skill).toContain("flab mcp");
     expect(skill).toContain("record.plan");
+    expect(skill).toContain("defineInstrument()");
     expect(skill).not.toContain("TODO");
   }
 });
@@ -111,8 +125,20 @@ test("harness-native invocation adapters remain discoverable", () => {
   expect(openCode).toContain("win-loss");
   expect(openCode).toContain("aim assist");
   expect(openCode).toContain("offline confirmation");
+  expect(openCode).toContain("defineInstrument()");
 
   const ignore = read(".gitignore");
   expect(ignore).toContain("!.gjc/config.yml");
   expect(ignore).toContain("!.gjc/skills/*/SKILL.md");
+});
+
+test("game targets declare one generated Instrument surface without export/help boilerplate", () => {
+  for (const path of gameTargetPaths) {
+    const source = read(path);
+    expect(source).toContain("rpc.exports = defineInstrument({");
+    expect(source).toContain("recordingInstrumentActions()");
+    expect(source).not.toContain("rpc.exports = {");
+    expect(source).not.toContain("__describe():");
+    expect(source).not.toMatch(/\bmodHelp\s*\(/);
+  }
 });

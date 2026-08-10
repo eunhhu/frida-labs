@@ -5,6 +5,7 @@
 import React, { useState } from "react";
 import { Box, Text, useInput } from "ink";
 import { inspect } from "node:util";
+import { descriptorHelpRows } from "../core/index.js";
 import { workbench } from "./workbench.js";
 import { store, type SessionState } from "./store.js";
 
@@ -28,7 +29,12 @@ function macroTable(id: number): Map<string, string> {
   return t;
 }
 
-const META = [":help", ":macros", ":macro", ":clear", ":exports"];
+const META = [
+  ".help", "/help", ":help",
+  ".exports", "/exports", ":exports",
+  ".clear", "/clear", ":clear",
+  ":macros", ":macro",
+];
 
 export function Repl(props: { session: SessionState; focused: boolean }): React.JSX.Element {
   const { session } = props;
@@ -57,19 +63,21 @@ export function Repl(props: { session: SessionState; focused: boolean }): React.
   };
 
   const handleMeta = (src: string): boolean => {
-    if (src === ":help") {
+    if (/^[.:/]help$/.test(src)) {
       store.setResult(session.id, true, [
-        ":help                 this text",
-        ":exports              list describe() exports",
+        ".help /help :help     generated controls and action help",
+        ".exports /exports     list describe() exports",
         ":macros               list macros",
         ":macro name body      define macro (body runs through eval)",
         ":name                 run macro",
-        ":clear                clear the result pane",
+        ".clear /clear         clear the result pane",
         "history: ↑/↓ · autocomplete: tab · multiline: end a line with \\",
+        "",
+        ...descriptorHelpRows(session.describe ?? []),
       ].join("\n"));
       return true;
     }
-    if (src === ":exports") {
+    if (/^[.:/]exports$/.test(src)) {
       const names = (session.describe ?? []).map((d) => d.name);
       store.setResult(session.id, true, names.join("\n") || "(no describe data — try the explorer's r)");
       return true;
@@ -79,7 +87,7 @@ export function Repl(props: { session: SessionState; focused: boolean }): React.
       store.setResult(session.id, true, rows.join("\n") || "(no macros)");
       return true;
     }
-    if (src === ":clear") {
+    if (/^[.:/]clear$/.test(src)) {
       store.setResult(session.id, true, "");
       return true;
     }
@@ -160,8 +168,8 @@ export function Repl(props: { session: SessionState; focused: boolean }): React.
   return (
     <Box flexDirection="column" flexGrow={1} paddingX={1}>
       <Box flexDirection="column">
-        <Text bold>repl</Text>
-        <Text dimColor>:help · Tab complete · Enter run</Text>
+        <Text bold>advanced console</Text>
+        <Text dimColor>.help or /help · Tab complete · Enter run</Text>
       </Box>
       <Box flexDirection="column" flexGrow={1}>
         {session.lastResult === null && <Text dimColor>eval runs with rpc.exports in scope — e.g. await ping()</Text>}

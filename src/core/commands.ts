@@ -26,7 +26,7 @@ import {
   resolveDevice,
   type DeviceSelector,
 } from "./devices.js";
-import { ActionService } from "./actions.js";
+import { ActionService, descriptorHelpRows } from "./actions.js";
 import {
   MACHINE_PROTOCOL,
   handleMachineRequest,
@@ -155,9 +155,37 @@ export function completeHumanRepl(line: string, rpcNames: readonly string[]): [s
     ...rpcNames.map((name) => `await ${name}(`),
     ".exit",
     ".quit",
+    ".help",
+    "/help",
+    ":help",
+    ".exports",
+    "/exports",
+    ":exports",
   ])];
   const matches = candidates.filter((candidate) => candidate.startsWith(line));
   return [matches.length ? matches : candidates, line];
+}
+
+export function humanReplHelp(descriptors: readonly RpcDescriptor[]): string {
+  return [
+    "Instrument console commands",
+    "  .help | /help | :help       generated action and control help",
+    "  .exports | /exports         stable RPC action names",
+    "  .exit | .quit               detach and close",
+    "  Tab                         complete commands and RPC calls",
+    "",
+    "For checkboxes, sliders, selects, input fields, and live state:",
+    "  flab tui <target>",
+    "",
+    ...descriptorHelpRows(descriptors),
+  ].join("\n");
+}
+
+function humanReplMeta(source: string): "help" | "exports" | "exit" | null {
+  if (/^[.:/]help$/.test(source)) return "help";
+  if (/^[.:/]exports$/.test(source)) return "exports";
+  if (/^\.(?:exit|quit)$/.test(source) || /^\/(?:exit|quit)$/.test(source)) return "exit";
+  return null;
 }
 
 
@@ -175,7 +203,7 @@ async function startHumanSession(options: SessionOptions, label: string, ctx: Cm
   });
   const descriptors = await session.describe();
   const rpcNames = descriptors.map((item) => item.name);
-  ctx.out(`REPL ready — rpc exports: ${rpcNames.join(", ") || "(none)"} · .exit to quit`);
+  ctx.out(`Instrument console ready — .help or /help · .exit to quit · flab tui ${label} for controls`);
   if (detachedReason !== null) {
     await session.close();
     return 0;
@@ -189,12 +217,17 @@ async function startHumanSession(options: SessionOptions, label: string, ctx: Cm
   rl.prompt();
   rl.on("line", async (line) => {
     const source = line.trim();
-    if (source === ".exit" || source === ".quit") return void rl.close();
+    const meta = humanReplMeta(source);
+    if (meta === "exit") return void rl.close();
+    if (meta === "help") ctx.out(humanReplHelp(descriptors));
+    else if (meta === "exports") ctx.out(rpcNames.join("\n") || "(no described actions)");
     if (source) {
-      try {
-        const result = await session.eval(source);
-        if (result !== undefined) ctx.out(inspect(result, { colors: true, depth: 6 }));
-      } catch (error) { ctx.err((error as Error).message); }
+      if (meta === null) {
+        try {
+          const result = await session.eval(source);
+          if (result !== undefined) ctx.out(inspect(result, { colors: true, depth: 6 }));
+        } catch (error) { ctx.err((error as Error).message); }
+      }
     }
     rl.prompt();
   });
@@ -629,10 +662,10 @@ export const commands: Command[] = [
   },
   {
     name: "run",
-    usage: "flab run <target> [--device DEVICE | --host HOST] [--proc P] [--spawn] [--eval \"code\" | --session --json] [--no-watch]",
-    summary: "Compile, attach, inject, then REPL or run a one-shot evaluation.",
-    allowedFlags: ["json", "proc", "spawn", "eval", "no-watch", "session", ...DEVICE_FLAGS],
-    detail: "One-shot JSON mode: flab run <target> --no-watch --eval 'await ping()' --json",
+    usage: "flab run <target> [--device DEVICE | --host HOST] [--proc P] [--spawn] [--console | --eval \"code\" | --session --json] [--no-watch]",
+    summary: "Open the human Instrument dashboard; use --console, --eval, or --session for advanced access.",
+    allowedFlags: ["json", "proc", "spawn", "console", "eval", "no-watch", "session", ...DEVICE_FLAGS],
+    detail: "Human dashboard is the TTY default. Advanced console: --console. One-shot JSON: --no-watch --eval 'await ping()' --json",
     async run(args, flags, ctx) {
       const target = args[0];
       if (!target || args.length !== 1) {
@@ -640,8 +673,12 @@ export const commands: Command[] = [
       }
       const oneShot = typeof flags.eval === "string";
       const machine = flags.session === true;
-      if (machine && oneShot) return commandFailure(ctx, "--session cannot be combined with --eval", 2);
+      const consoleMode = flags.console === true;
+      if ([oneShot, machine, consoleMode].filter(Boolean).length > 1) {
+        return commandFailure(ctx, "--console, --eval, and --session are mutually exclusive", 2);
+      }
       if (machine && !ctx.json) return commandFailure(ctx, "--session requires --json", 2);
+      if (consoleMode && ctx.json) return commandFailure(ctx, "--console cannot be combined with --json", 2);
       let device: DeviceSelector | undefined;
       try { device = selectedDevice(flags); }
       catch (error) { return commandFailure(ctx, (error as Error).message, 1); }
@@ -662,6 +699,9 @@ export const commands: Command[] = [
         return 0;
       }
       if (machine) return startMachineSession(options, ctx);
+      if (!consoleMode) {
+        return commandFailure(ctx, "flab run opens the Instrument dashboard in a TTY; use --console for the advanced console or --session --json for agents", 2);
+      }
       return startHumanSession(options, target, ctx);
     },
   },

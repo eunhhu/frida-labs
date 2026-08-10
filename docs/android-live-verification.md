@@ -50,7 +50,7 @@ clear success path require the owner to unlock the phone and open those scenes.
 
 The live TUI journey was exercised as `1 Connect → 2 Analyze → 3 Instrument`, including
 typed boolean input, action execution, verification receipt, reset receipt,
-help, the advanced-tool palette, and an 80×24 compact terminal. Human REPLs
+help, the advanced-tool palette, and an 80×24 compact terminal. Human consoles
 stayed alive for all three targets and Tab completed RPC names. One persistent
 NDJSON process remains the supported AI interface; agents do not scrape or
 drive the TUI. Mobile application enumeration now maps localized process names

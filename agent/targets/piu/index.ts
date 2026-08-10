@@ -8,7 +8,8 @@
 // targets never touch node_modules directly — enforced by depcheck).
 import { ok } from "../../lib/log.js";
 import * as il2cpp from "../../lib/il2cpp.js";
-import { recordingDescriptors, recordingRpcSurface } from "../../lib/recording.js";
+import { control, defineInstrument, field, read } from "../../lib/instrument.js";
+import { recordingInstrumentActions } from "../../lib/recording.js";
 
 let enabled = false;
 let installed = false;
@@ -127,41 +128,52 @@ function state(): Record<string, unknown> {
   };
 }
 
-rpc.exports = {
-  ...recordingRpcSurface(),
-  modInfo() {
-    return {
+rpc.exports = defineInstrument({
+  info: read({
+    label: "About this Instrument",
+    category: "Start here",
+    doc: "Runtime, feature, and offline safety boundary",
+  }, () => ({
       game: "PUMP IT UP RISE",
       runtime: "Unity IL2CPP",
       safety: "Owned offline play only; correction starts disabled and requires explicit confirmation",
       feature: "bounded probabilistic local judgment correction",
-    };
+  })),
+  state: read({
+    label: "Correction status",
+    category: "Start here",
+    doc: "Hook ownership, method identity, and clean state",
+  }, state),
+  actions: {
+    toggle: control({
+      label: "Judgment correction",
+      category: "Training",
+      args: [
+        field.checkbox("on", { label: "Judgment correction" }),
+        field.offline({ optional: true }),
+      ],
+      doc: "Enabling requires an owned offline session; disabling removes the implementation",
+      status: "modState",
+    }, (on: boolean, offlineConfirmed?: boolean) => setEnabled(!!on, offlineConfirmed)),
+    judgmentStats: read({
+      label: "Judgment activity",
+      category: "Training",
+      doc: "Bounded call counts, original/corrected distributions, and latest invocation",
+    }, stats),
+    ...recordingInstrumentActions(),
   },
-  modHelp() {
-    return [
-      "1. modState() confirms correction is disabled by default",
-      "2. toggle(true, true) only in an owned offline play session",
-      "3. toggle(false) or resetAll() removes the IL2CPP implementation",
-    ];
-  },
-  modState() { return state(); },
-  judgmentStats() { return stats(); },
-  async toggle(on: boolean, offlineConfirmed?: boolean) { return setEnabled(!!on, offlineConfirmed); },
-  async resetAll() { return setEnabled(false); },
-  async dispose() { return setEnabled(false); },
-  __describe(): unknown {
-    return [
-      { name: "modInfo", label: "About this Instrument", category: "Start here", doc: "Runtime, feature, and offline safety boundary", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "modHelp", label: "Show the quick guide", category: "Start here", doc: "Explicit enable, disable, and cleanup flow", capabilities: ["instrument", "analysis"], effect: "read", returns: "table" },
-      { name: "modState", label: "Show correction status", category: "Start here", doc: "Hook ownership, method identity, and clean state", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "judgmentStats", label: "Read judgment activity", category: "Training", doc: "Bounded call counts, original/corrected distributions, and latest invocation", capabilities: ["instrument", "analysis"], effect: "read", returns: "json" },
-      { name: "toggle", label: "Toggle judgment correction", category: "Training", args: [{ name: "on", type: "boolean" }, { name: "offlineConfirmed", type: "boolean?" }], doc: "Enabling requires offlineConfirmed=true; disabling removes the implementation", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
-      { name: "resetAll", label: "Disable and restore", category: "Start here", doc: "Remove the owned IL2CPP implementation", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
-      { name: "dispose", label: "Dispose owned handles", category: "Start here", doc: "Automatic detach cleanup", capabilities: ["instrument"], effect: "control", returns: "json", statusAction: "modState" },
-      ...recordingDescriptors(),
-      { name: "__describe", doc: "This descriptor" },
-    ];
-  },
-};
+  reset: control({
+    label: "Disable and restore",
+    category: "Start here",
+    doc: "Remove the owned IL2CPP implementation",
+    status: "modState",
+  }, () => setEnabled(false)),
+  dispose: control({
+    label: "Dispose owned handles",
+    category: "Start here",
+    doc: "Automatic detach cleanup",
+    status: "modState",
+  }, () => setEnabled(false)),
+});
 
 ok("PIU Instrument ready (judgment correction disabled)");

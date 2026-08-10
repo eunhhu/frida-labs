@@ -54,6 +54,11 @@ test("boolean flags never consume positional arguments", () => {
     args: ["terraria"],
     flags: { "no-watch": true, json: true },
   });
+  expect(parseCliArgs(["run", "terraria", "--console"])).toEqual({
+    command: "run",
+    args: ["terraria"],
+    flags: { console: true },
+  });
   expect(parseCliArgs(["probe", "--session", "Game.exe", "--json"])).toEqual({
     command: "probe",
     args: ["Game.exe"],
@@ -76,6 +81,12 @@ test("global and command help are successful and beginner-oriented", async () =>
   expect(command.err).toEqual([]);
   expect(command.out[0]).toContain("flab probe");
   expect(command.out[0]).toContain("engine-agnostic");
+
+  const runHelp = capture();
+  expect(await runCli(["run", "--help"], runHelp.io)).toBe(0);
+  expect(runHelp.err).toEqual([]);
+  expect(runHelp.out[0]).toContain("human Instrument dashboard");
+  expect(runHelp.out[0]).toContain("--console");
 });
 
 test("value flags remain order-independent and reject missing values", () => {
@@ -142,7 +153,7 @@ test("the registry exposes the approved device-aware command scope", () => {
   expect(commands.find((command) => command.name === "devices")?.allowedFlags).toEqual(["json", ...deviceFlags]);
   expect(commands.find((command) => command.name === "processes")?.allowedFlags).toEqual(["json", "limit", "query", ...deviceFlags]);
   expect(commands.find((command) => command.name === "probe")?.allowedFlags).toEqual(["json", "pid", "spawn", "eval", "session", ...deviceFlags]);
-  expect(commands.find((command) => command.name === "run")?.allowedFlags).toEqual(["json", "proc", "spawn", "eval", "no-watch", "session", ...deviceFlags]);
+  expect(commands.find((command) => command.name === "run")?.allowedFlags).toEqual(["json", "proc", "spawn", "console", "eval", "no-watch", "session", ...deviceFlags]);
   expect(commands.find((command) => command.name === "capabilities")?.allowedFlags).toEqual(["json"]);
   expect(commands.find((command) => command.name === "targets")?.allowedFlags).toEqual(["json"]);
   expect(commands.find((command) => command.name === "new")?.allowedFlags).toEqual(["json", "proc", ...deviceFlags]);
@@ -352,6 +363,10 @@ test("capabilities are discoverable and machine sessions require explicit JSON t
   const mixed = capture();
   expect(await runCli(["probe", "Game.exe", "--session", "--eval", "1", "--json"], mixed.io)).toBe(2);
   expect(output(mixed)).toEqual({ error: "--session cannot be combined with --eval" });
+
+  const consoleJson = capture();
+  expect(await runCli(["run", "terraria", "--console", "--json"], consoleJson.io)).toBe(2);
+  expect(output(consoleJson)).toEqual({ error: "--console cannot be combined with --json" });
 });
 
 test("PID probe validation occurs before Frida and uses validation exit 1", async () => {

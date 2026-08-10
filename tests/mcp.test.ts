@@ -61,7 +61,10 @@ test("flab MCP exposes two low-noise tools over a real stdio handshake", async (
   const called = await reader.next();
   expect(called).toMatchObject({
     id: 3,
-    result: { isError: false, structuredContent: { ok: true, result: { protocol: "flab.control.v1" } } },
+    result: { isError: false, structuredContent: { ok: true, result: {
+      protocol: "flab.control.v1",
+      descriptorUi: { controls: ["input", "checkbox", "slider", "select"] },
+    } } },
   });
   child.stdin.end();
   expect(await child.exited).toBe(0);

@@ -40,10 +40,10 @@ import {
 export const ANALYSIS_SURFACES: readonly WorkspaceSurface[] = ["actions", "explorer", "record"];
 export const INSTRUMENT_SURFACES: readonly WorkspaceSurface[] = ["actions", "repl", "observe"];
 const SURFACE_LABELS: Record<WorkspaceSurface, string> = {
-  actions: "actions",
-  repl: "console",
+  actions: "controls",
+  repl: "advanced console",
   explorer: "memory",
-  observe: "output",
+  observe: "events",
   debug: "checks",
   record: "record",
 };
@@ -104,6 +104,11 @@ function HelpPanel(): React.JSX.Element {
       <Text><Text bold>1 Connect</Text> — choose a device and a running app or saved game.</Text>
       <Text><Text bold>2 Analyze</Text> — discover structure, memory, and Record one human-play scenario.</Text>
       <Text><Text bold>3 Instrument</Text> — run linked game features and inspect output.</Text>
+      <Text> </Text>
+      <Text bold>Instrument controls</Text>
+      <Text>Enter opens up to three fields · Space/←/→ changes checkbox, slider, or choice.</Text>
+      <Text>Type into text/value fields · Enter applies · s refreshes the linked live state.</Text>
+      <Text>The advanced console accepts .help, /help, or :help.</Text>
       <Text> </Text>
       <Text>Navigate: ↑/↓ choose · Enter open · Esc back</Text>
       <Text>Workspace: Ctrl+P switch · ] next surface · ? help</Text>
@@ -203,10 +208,14 @@ export function App({
   initialTarget,
   initialProc,
   initialDevice,
+  initialSpawn,
+  initialNoWatch,
 }: {
   initialTarget?: string;
   initialProc?: string;
   initialDevice?: DeviceSelector;
+  initialSpawn?: boolean;
+  initialNoWatch?: boolean;
 }): React.JSX.Element {
   const { exit } = useApp();
   const windowSize = useWindowSize();
@@ -287,7 +296,14 @@ export function App({
   }, [refreshProcesses]);
 
   useEffect(() => {
-    if (initialTarget) workbench.attach(initialTarget, initialProc, initialDevice);
+    if (initialTarget) workbench.open({
+      kind: "target",
+      target: initialTarget,
+      ...(initialProc ? { processOverride: initialProc } : {}),
+      ...(initialSpawn ? { spawn: true } : {}),
+      ...(initialNoWatch ? { noWatch: true } : {}),
+      ...(initialDevice ? { device: initialDevice } : {}),
+    });
     return () => { void workbench.closeAll(); };
     // Initial launch is intentionally one-shot; reconnect owns later attempts.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -733,6 +749,17 @@ export function App({
   );
 }
 
-export async function runTui(target?: string, proc?: string, device?: DeviceSelector): Promise<void> {
-  render(<App initialTarget={target} initialProc={proc} initialDevice={device} />);
+export async function runTui(
+  target?: string,
+  proc?: string,
+  device?: DeviceSelector,
+  options: { spawn?: boolean; noWatch?: boolean } = {},
+): Promise<void> {
+  render(<App
+    initialTarget={target}
+    initialProc={proc}
+    initialDevice={device}
+    initialSpawn={options.spawn}
+    initialNoWatch={options.noWatch}
+  />);
 }
